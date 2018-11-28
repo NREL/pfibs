@@ -6,7 +6,7 @@ This software is a Python package designed to act as an interface between FEniCS
 
 ## Installation:
 
-In order to use pFiBS, the python version FEniCS 2017.2.0 or later must be installed and compiled with the PETSc linear algebra backend. If those critera are met, then pFiBS can be installed by downloading the source files from the GitHub (https://github.nrel.gov/jallen/pfibs) and running the command 
+In order to use pFiBS, the python version FEniCS 2017.2.0 or later must be installed and compiled with the PETSc linear algebra backend. If those critera are met, then pFiBS can be installed by downloading the source files from the GitHub (https://github.com/NREL/pfibs) and running the command 
 ```
 pip install -e .
 ```
