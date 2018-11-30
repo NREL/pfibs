@@ -6,7 +6,7 @@ This software is a Python package designed to act as an interface between FEniCS
 
 ## Installation:
 
-In order to use pFibs, the python version FEniCS 2017.2.0 or later must be installed and compiled with the PETSc linear algebra backend. If those critera are met, then pFiBS can be installed by downloading the source files from the GitHub (https://github.com/NREL/pfibs) and running the command 
+In order to use pFibs, the python version FEniCS 2017.2.0 or later must be installed and compiled with the PETSc linear algebra backend. If those critera are met, then pFibs can be installed by downloading the source files from the GitHub (https://github.com/NREL/pfibs) and running the command 
 ```
 pip install -e .
 ```
@@ -14,17 +14,19 @@ in the root source folder.
 
 ## How to Use: 
 
-Add `from pfibs import *` into your existing FEniCS code. Leveraging pFibs to solve your variational formulation is a four step process.
+Add `from pfibs import *` into your existing FEniCS code. Leveraging pFibs to solve your variational formulation involves a four step process.
 
 ###### Step 1 - (Optional) Define the block structure:
 
-The user has the option to manually define the block structure. Normally, FEniCS uses a FunctionSpace that contains sub FunctionSpaces. The default behavior is to create a block from each sub FunctionSpace on the first level. For example, if the FunctionSpace is composed of a VectorElement and a FiniteElement and if block_structure is not specified, then pFibs will create two blocks, one for the VectorElement and one for the FiniteElement. The default naming for these blocks will be 0 and 1. 
-
-If the user wants to provide different names for these two fields, e.g., fields 'u' and 'p' for the VectorElement and FiniteElement, respectively, the block structure should be defined as:
+The user has the option to manually define the block structure. Normally, FEniCS uses a FunctionSpace that contains sub FunctionSpaces. The default behavior is to create a block from each sub FunctionSpace on the first level. For example, if the FunctionSpace is composed of a VectorElement and a FiniteElement and if block_structure is not specified, then pFibs will create two blocks, one for the VectorElement and one for the FiniteElement. The default naming for these blocks will be 0 and 1:
+```
+block_structure = [[0,0],[0,1]]
+```
+The first level in this list indicates how many blocks are needed for the problem. The first entry of each inner list indicates the naming convention of the block, and the second entry of each inner list assigns the sub FunctionSpace to the block. If the user wants to provide different names for these two blocks, e.g., blocks 'u' and 'p' for the VectorElement and FiniteElement, respectively, the block structure should be defined as:
 ```
 block_structure = [['u',0],['p',1]]
 ```
-This tells pFibs that there will be two blocks. The first block will name the 0-th and 1st sub FunctionSpaces 'u' and 'p' respectively.
+This tells pFibs to name the 0-th and 1st sub FunctionSpaces 'u' and 'p' respectively.
 
 Alternatively, consider a FunctionSpace was composed of 3 sub FunctionSpaces all of which were FiniteElement. If the user wanted to create a block structure that placed the first two subspaces into a block and the last subspace into a separate block, the user would define:
 ```
@@ -32,7 +34,7 @@ block_structure = [['u',[0,1]],['p',[2]]]
 ```
 This tells pFiBS that there will be two blocks. The first block will be named 'u' and contains the DOFs from subspaces 0 and 1. The second block is named 'p' and contains the DOFs from subspace 2. 
 
-Now suppose the user has two VectorFunctionSpaces and wants the block solve grouped by dimension i.e., x- variables belong to the 'x' field and y- variables to the 'y' field. Thus, block_structure would be defined as:
+Now suppose the user has two VectorFunctionSpaces and wants the block solve grouped by dimension i.e., x- variables belong to the 'x' block and y- variables to the 'y' block. Thus, block_structure would be defined as:
 ```
 block_structure = [['x',[[0,0],[1,0]]],['y',[[1,0],[1,1]]]]
 ```
