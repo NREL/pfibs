@@ -36,17 +36,12 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         if self.options_prefix != "":
             if self.options_prefix[-1] != "_":
                 self.options_prefix = self.options_prefix + "_"
-                
             self.ksp().setOptionsPrefix(self.options_prefix)
         
         ## Attach DM ##
         self.ksp().setDM(vbp.dm)
         self.ksp().setDMActive(False)
         
-        ## TEST ##
-        if self.split_0 != "":
-            self.set_fieldsplit_solvers(self.split_0, self.options_prefix)
-
     def init_solver_options(self):
  
         ## Start the timer ##
@@ -54,40 +49,7 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
 
         ## Create PETSc commandline options if necessary ##
         if self.split_0 != "":
-            self.build_fieldsplit(self.split_0, self.options_prefix)
-
-
-        ## Set global KSP ##
-        #self.set_ksp_type(self.ksp_type)
-
-        ### Set global PC ## 
-        #self.set_pc_type(self.pc_type)
-
-        ### Deal with fieldsplitting ##
-        #if self.pc_type is "fieldsplit":
-
-        #    ## Setup the Fields ##
-        #    self.setup_field_split()
-
-        #    ## Setup schur if defined ##
-        #    if self.schur is not None:
-        #        self.set_schur(self.schur)
-        #        self.ksp().pc.setUp()
-
-        #    ## Split the preconditioner into the individual blocks. ##
-        #    self.subksp = self.ksp().pc.getFieldSplitSubKSP()
-
-        #    # ## Set sub KSP ##
-        #    for block in self.sub_ksp_type:
-        #        self.set_ksp_type(block,self.sub_ksp_type[block])
-        #    
-        #    # ## Set sub PC ##
-        #    for block in self.sub_pc_type:
-        #        self.set_pc_type(block,self.sub_pc_type[block])
-
-        #    ## Set PETSc commandline options for subksp ##
-        #    for ksp in self.subksp:
-        #        ksp.setFromOptions()
+            self.set_fieldsplit(self.split_0, self.options_prefix)
 
         ## Set PETSc commandline options ##
         self.ksp().setFromOptions()
@@ -95,45 +57,8 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         ## Stop the timer ##
         timer.stop()
     
-    ##
-    #def map_str2int(self,key):
-    #    if key in self.block_split:
-            
-    #    elif key in self.block_field:
-    #        return self.block_field[key][0]
-    #    else:
-    #        raise ValueError("Key %s not found in the field/split dicts" %(key))
-
-    ## Given a possibly nested list, return it flattened ##
-    def flatten(self,lis):
-        new_lis = []
-        if isinstance(lis,int):
-            new_lis.append(lis)
-        else:
-            for item in lis:
-                new_lis.extend(flatten(item))
-        return new_lis
-
-    ## Shift the index numbering from 0 to n ##
-    def shift(self,lis,n=0):
-        if isinstance(lis,int):
-            return[n,n]
-        else:
-            n -= 1
-            for i in range(len(lis)):
-                n += 1
-                out = shift(lis[i],n)
-                lis[i] = out[0]
-                n = out[1]
-            return [lis,n]
-        
-    ## Set fieldsplit fields via PETScOptions ##
-    #def set_fieldsplit_fields(self, split_name, prefix):
-    #    block_name = 
-    
-    
     ## Set fieldsplit solvers via PETScOptions ##
-    def set_fieldsplit_solvers(self, split_name, prefix, recursion=False):
+    def set_fieldsplit(self, split_name, prefix, recursion=False):
         
         ## Obtain block information for this split ##
         block_name = self.block_split[split_name][0]
@@ -145,30 +70,41 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         if n != 1:
             
             ## Set solver options for this split ##
-            print("PETScOptions.set('"+prefix+"pc_type"+"','"+"fieldsplit"+"')")
+            df.PETScOptions.set(prefix+"pc_type","fieldsplit")
             for key in block_solvers:
-                print("PETScOptions.set('"+prefix+key+"','"+block_solvers[key])
+                df.PETScOptions.set(prefix+key,block_solvers[key])
         
-        ## Iterate through fieldsplits ##
+        ## List of all fields in total ##
         field_array = []
+        
+        ## List of all fields per split ##
         sub_field_array = []
+
+        ## Iterate through each split ##
         for i in range(n):
 
-            ## If the split contains a field variable ##
+            ## Case 1: split contains a field variable ##
             if block_name[i] in self.block_field:
 
-                ## Set solver options for the field variable ##
+                ## Assign prefix based on field name ##
                 new_prefix = prefix+"fieldsplit_"+block_name[i]+"_"
-                for key in self.block_field[block_name[i]][2]:
-                    print("PETscOptions.set('"+new_prefix+key+"','"+self.block_field[block_name[i]][2][key]+"')")
                 
+                ## Set solver options for the field variable ##
+                for key in self.block_field[block_name[i]][2]:
+                    df.PETScOptions.set(new_prefix+key,self.block_field[block_name[i]][2][key])
+                
+                ## Update the lists ##
                 sub_field_array.append(self.block_field[block_name[i]][0])
                 field_array.append(self.block_field[block_name[i]][0])
 
-            ## If the split contains another split ##
+            ## Case 2: split contains another split ##
             elif block_name[i] in self.block_split:
                 recursive_split = True
-                nested_field_array = self.set_fieldsplit_solvers(block_name[i],prefix+"fieldsplit_"+repr(i)+"_",True)
+                
+                ## Obtain list of fields within this split ##
+                nested_field_array = self.set_fieldsplit(block_name[i],prefix+"fieldsplit_"+repr(i)+"_",True)
+                
+                ## Update the lists ##
                 if isinstance(nested_field_array,list):
                     field_array.extend(nested_field_array)
                 else:
@@ -176,33 +112,28 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
                 sub_field_array.append(nested_field_array)
             else:
                 raise ValueError("Block '%s' not found in the field/split dicts" %(block_name[i]))
-            
-        if (recursion and recursive_split):
-            print(sub_field_array)
+        
+        ## Assigning fields to each split ##   
+        if recursion and recursive_split or not recursion:
             list_indx = 0
             for i in range(len(sub_field_array)):
-                if isinstance(sub_field_array[i],list):
-                    field_length = len(sub_field_array[i])
+                
+                ## Case 1: first split only ##
+                if not recursion:
+                    field_list = str(sub_field_array[i]).strip("[]")
+                
+                ## Case 2: Nested splits, rescale numbering ##
                 else:
-                    field_length = 1
-                field_list = str([j for j in range(list_indx, list_indx+field_length)]).strip("[]")
-                list_indx += field_length
-                print("PETScOptions.set('"+prefix+"pc_fieldsplit_"+repr(i)+"_fields','",field_list+"')")
-        elif not recursion:
-            for i in range(len(sub_field_array)):
-                field_list = str(sub_field_array[i]).strip("[]")
-                print("PETScOptions.set('"+prefix+"pc_fieldsplit_"+repr(i)+"_fields','",field_list+"')")
-
+                    if isinstance(sub_field_array[i],list):
+                        field_length = len(sub_field_array[i])
+                    else:
+                        field_length = 1
+                    field_list = str([j for j in range(list_indx, list_indx+field_length)]).strip("[]")
+                    list_indx += field_length
+                df.PETScOptions.set(prefix+"pc_fieldsplit_"+repr(i)+"_fields",field_list)
+        
+        ## Return list of all fields in this split ##
         return field_array
-            #else:
-            #    new_prefix = "fieldsplit_"+repr(i)+"_"
-            #    print(block[i])
-            ##    flat = flatten(block[i])
-            #    flat_str = str(flat).strip("[]")
-            #
-            #    print("PETScOptions.set('"+prefix+"pc_"+newprefix+"fields"+"', '"+flat_str+"')")
-            #    build_fieldsplit(shift(block[i])[0],prefix+newprefix)
-
 
     def set_pc_type(self,*args):
         ## This method takes either a string or an int and string. Providing just a string      ##

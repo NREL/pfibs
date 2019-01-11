@@ -171,28 +171,39 @@ L = - dot(v1,n)*p1_left*ds(1) - dot(v2,n)*p2_left*ds(1) \
 
 ## Setup block problem ##
 #block_structure = [['u1',[0]],['p1',[1]],['u2',[2]],['p2',[3]]]
-params = {
-          "ksp_type":"preonly",
-          "pc_type":"bjacobi"
+params1 = {
+    "ksp_type":"preonly",
+    "pc_type":"bjacobi"
 }
 params2 = {
-          "ksp_type":"gmres"
+    "ksp_type":"preonly",
+    "pc_type":"hypre"
 }
-problem = BlockProblem(a,L,w,bcs=[])#,block_structure=block_structure)
-problem.add_field('v1',0,solver=params)
-problem.add_field('v2',3,solver=params)
-problem.add_field('p1',1,solver=params)
-problem.add_field('p2',4,solver=params)
-problem.add_field('t1',2,solver=params)
-problem.add_field('t2',5,solver=params)
-problem.add_split('s1',['v1','t1'],solver=params2)
-problem.add_split('s2',['p1','s1'],solver=params2)
-problem.add_split('s3',['v2','p2'],solver=params2)
-problem.add_split('s4',['s3','t2'],solver=params2)
-problem.add_split('s5',['s2','s4'],solver=params2)
-#print(problem.block_split)
-
+multi = {
+    "ksp_type":"preonly",
+    "pc_fieldsplit_type":"additive"
+}
+schur = {
+    "ksp_type":"preonly",
+    "pc_fieldsplit_type":"schur",
+    "pc_fieldsplit_fact_type":"full",
+    "pc_fieldsplit_schur_precondition":"selfp"
+}
+problem = BlockProblem(a,L,w,bcs=[])
+problem.add_field('v1',0,solver=params1)
+problem.add_field('v2',3,solver=params1)
+problem.add_field('p1',1,solver=params2)
+problem.add_field('p2',4,solver=params2)
+problem.add_field('t1',2,solver=params2)
+problem.add_field('t2',5,solver=params2)
+problem.add_split('s1',['v1','p1'],solver=schur)
+problem.add_split('s2',['s1','t1'],solver=multi)
+problem.add_split('s3',['v2','p2'],solver=schur)
+problem.add_split('s4',['s3','t2'],solver=multi)
+problem.add_split('s5',['s2','s4'],solver={"ksp_type":"gmres"})
+PETScOptions.set("ksp_monitor_true_residual")
+PETScOptions.set("ksp_view")
 
 ## Setup block solver ##
 solver = LinearBlockSolver(problem,options_prefix="")
-#solver.solve()
+solver.solve()
