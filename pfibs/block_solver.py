@@ -14,7 +14,7 @@ except ImportError:
     dolfin_adjoint_found = False
 
 class LinearBlockSolver(object):
-    def __init__(self, vbp, options_prefix=None, comm=None):
+    def __init__(self, vbp, options_prefix="", comm=None):
         self.a = vbp.a
         self.L = vbp.L
         self.bcs = vbp.bcs
@@ -60,7 +60,7 @@ class LinearBlockSolver(object):
         return its
 
 class NonlinearBlockSolver(object):
-    def __init__(self, vbp, options_prefix=None, comm=None):         
+    def __init__(self, vbp, options_prefix="", comm=None):         
         self.a = vbp.a
         self.L = vbp.L
         self.bcs = vbp.bcs
