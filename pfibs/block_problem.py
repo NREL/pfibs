@@ -41,21 +41,6 @@ class BlockProblem(object):
         self.finalize_field = False     # Flag to indicate all fields added
         self.split_0 = ""               # Name of the outer most split if using nested/recursion
 
-        ## Assign fields in DM ##
-        #self.create_DM()
-
-        ## Optional nested splits. Only two levels ##
-        ## of recursion are supported for now.     ##
-        #if not self.assign_splits:
-        #    self.create_splits()
-
-        ## Dictionary for KSP and PC types ##
-        #self.schur = None
-        #self.ksp_type = "gmres"
-        #self.pc_type = "fieldsplit"
-        #self.sub_ksp_type = dict.fromkeys(self.splits,"preonly")
-        #self.sub_pc_type = dict.fromkeys(self.splits,"ilu")
-
         ## Test if dolfin adjoint is required but not installed ##
         if self.adjoint == True and dolfin_adjoint_found == False:
             raise RuntimeError("Dolfin-adjoint is not installed")
@@ -75,8 +60,8 @@ class BlockProblem(object):
         solver_params = kwargs.get("solver",{})
 
         ## Check types ##
-        if not isinstance(field_name, str):
-            raise TypeError("Field name must be of type str")
+        #if not isinstance(field_name, str):
+        #    raise TypeError("Field name must be of type str")
         if not isinstance(solver_params, dict):
             raise TypeError("Solver parameters must be of type dict")
         
@@ -90,28 +75,39 @@ class BlockProblem(object):
         ## Default if empty ##
         if not self.block_field:
             for i in range(self.V.num_sub_spaces()):
-                self.block_field.update({str(i):[i,i,{}]})
+                self.block_field.update({i:[i,i,{}]})
             self.num_fields = len(self.block_field)
 
         ## Create PetscSection ##
         self.section = PETSc.Section().create()
         self.section.setNumFields(self.num_fields)
         self.section.setChart(0,len(self.V.dofmap().dofs()))
+
+        ## Iterate through all the block fields ##
         for key in self.block_field:
-            self.section.setFieldName(self.block_field[key][0],key)
+            self.section.setFieldName(self.block_field[key][0],str(key))
+            
+            ## If multiple subspaces belong to this field ##
             if isinstance(self.block_field[key][1],list):
                 dofs = np.array([])
                 for space in self.block_field[key][1]:
+                    
+                    ## Case 1: subspace of FunctionSpace ##
                     if isinstance(space,int):
                         dofs = np.append(dofs,self.V.sub(space).dofmap().dofs())
+                    
+                    ## Case 2: subspace of subspace of FunctionSpace
                     elif isinstance(space,list):
                         if len(space) != 2:
                             raise ValueError("Argument length of vector function subspace can only be 2")
                         dofs = np.append(dofs,self.V.sub(space[0]).sub(space[1]).dofmap().dofs())
                     else:
                         raise TypeError("Input length must either be an int or a list of ints")
+            
+            ## Otherwise only one subspace belonging to this field ##
             else:
                 dofs = np.array(self.V.sub(self.block_field[key][1]).dofmap().dofs())
+            
             ## Assign dof to PetscSection ##
             for i in np.nditer(dofs):
                 self.section.setDof(i-self.goffset,1)

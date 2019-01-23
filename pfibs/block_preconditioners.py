@@ -7,22 +7,107 @@ from numpy import array, where, zeros
 from petsc4py import PETSc
 from mpi4py import MPI
 import copy
+import abc
 
-class PCDPC_BRM1():
-    def __init__(self,M_p,K_p,A_p,bc):
+class PCD_BRM1(object, metaclass=abc.ABCMeta):
+    #def __init__(self):
         ## This preconditioner will preform:        ##
         ##                                          ##
         ##    y = -M_p^{-1} (I + K_p A_p^{-1}) x    ##
 
-        ## Store the need operators ##
-        self.M_p = M_p
-        self.K_p = K_p
-        self.A_p = A_p
-        self.bc  = bc
-        self.bc_dofs = list(bc.get_boundary_values().keys())
-        self.bc_value = list(bc.get_boundary_values().values())
+    #    self.initialized = False
+    #    super(PCD_BRM1, self).__init__()
 
-    def build(self,is_block):
+    ## User is required to implement the following ##
+    @abc.abstractmethod
+    def build(self):
+        pass
+
+    ## PETSc method, either initialize or update the PC ##
+    def setUp(self, pc):
+        self.build(pc)
+        self.initialize(pc)
+        #print(self.hi)
+        #exit()
+        #if self.initialized:
+        #    self.update(pc)
+        #else:
+        #    self.build(pc)
+        #    self.initialize(pc)
+        #    self.intialized = True
+    ## 
+    def initialize(self, pc):
+        timer = Timer("pFibs: Initialize Preconditioner")
+        if pc.getType() != "python":
+            raise ValueError("Expecting PC type python")
+        print(self.test)
+        exit()
+        A,P = pc.getOperators()
+        print(A.getType())
+        print("HEY1")
+        ctx = pc.getKSP().content
+        #ctx = P.getPythonContext()
+        print("HEY2")
+        #ctx = pc.getPythonContext()
+        print(ctx.ctx)
+        ## Setup bcs and submatrices ##
+        print("HEY3")
+        self.bc = ctx["bc"]
+        
+        self.bc_dofs = list(self.bc.get_boundary_values().keys())
+        self.bc_value = list(self.bc.get_boundary_values().values())
+        self.block_dofs = PETSc.IS().createGeneral(self.bc.function_space().dofmap().dofs())
+        loc2globe = self.bc.function_space().dofmap().local_to_global_index
+        
+        ## Find the indexes of the local boundary dofs ##
+        for i in range(len(self.bc_dofs)):
+            dof = self.bc_dofs[i]
+            dof = loc2globe(dof)
+            val = where(array(self.block_dofs) == dof)[0]
+            if len(val) == 0:
+                self.bc_dofs[i] = False
+            else:
+                self.bc_dofs[i] = val[0]
+        timer2.stop()
+        
+        ## Extract PCD operators ##
+        self.M_p = ctx["M_p"]
+        self.K_p = ctx["K_p"]
+        self.A_p = ctx["A_p"]
+        M_p_mat = PETScMatrix()
+        K_p_mat = PETScMatrix()
+        A_p_mat = PETScMatrix()
+        assemble(self.M_p, tensor=M_p_mat)
+        assemble(self.K_p, tensor=K_p_mat)
+        assemble(self.A_p, tensor=A_p_mat)
+        self.bc.apply(A_p_mat)
+        
+        ## Extract submatrices to use ##
+        M_p_mat = M_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
+        self.K_p_matat = K_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
+        A_p_mat = A_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
+        
+        ## Build the solver for the M_p operator ##
+        self.M_p_ksp = PETSc.KSP().create()
+        self.M_p_ksp.setType(PETSc.KSP.Type.PREONLY)
+        self.M_p_ksp.pc.setType(PETSc.PC.Type.HYPRE)
+        self.M_p_ksp.setOperators(M_p_mat)
+
+        ## Build the solver for the A_p operator ##
+        self.A_p_ksp = PETSc.KSP().create()
+        self.A_p_ksp.setType(PETSc.KSP.Type.PREONLY)
+        self.A_p_ksp.pc.setType(PETSc.PC.Type.HYPRE)
+        self.A_p_ksp.setOperators(A_p_mat)
+        
+        timer.stop()  
+
+    def update(self, pc):
+        ssemble(self.M_p, tensor=M_p_mat)
+        assemble(self.K_p, tensor=K_p_mat)
+        assemble(self.A_p, tensor=A_p_mat)
+        self.bc.apply(A_p_mat)
+
+    def build(self,pc):
         ## Start the timer ##
         timer = Timer("pFibs: Build Preconditioner")
 
@@ -100,6 +185,12 @@ class PCDPC_BRM1():
 
         ## Stop the timer ##
         timer.stop()
+
+class MyPCD(PCD_BRM1):
+    def initialize(self,pc):
+        print("HI FROM MYPCD")
+
+
 
 
 class Pre_Laplace():

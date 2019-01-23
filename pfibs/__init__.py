@@ -12,7 +12,8 @@ PETSc.Sys.pushErrorHandler("traceback")
 del SubSystemsManager, PETSc
 
 # Import public API
-from pfibs.block_preconditioners import PCDPC_BRM1, UvahLiuWu, Elman, Pre_Laplace
+from pfibs.app_ctx import AppCtx
+from pfibs.block_preconditioners import PCD_BRM1, MyPCD, UvahLiuWu, Elman, Pre_Laplace
 from pfibs.custom_linear import CustomKrylovSolver
 from pfibs.custom_nonlinear import NLP, NS
 from pfibs.block_problem import BlockProblem

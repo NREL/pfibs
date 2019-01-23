@@ -7,6 +7,8 @@ from __future__ import print_function
 
 ## Import preliminaries ##
 from dolfin import *
+import petsc4py
+petsc4py.init('-log_view')
 from pfibs import *
 from petsc4py import PETSc
 import numpy as np
@@ -190,20 +192,26 @@ schur = {
     "pc_fieldsplit_schur_precondition":"selfp"
 }
 problem = BlockProblem(a,L,w,bcs=[])
-problem.add_field('v1',0,solver=params1)
-problem.add_field('v2',3,solver=params1)
-problem.add_field('p1',1,solver=params2)
-problem.add_field('p2',4,solver=params2)
-problem.add_field('t1',2,solver=params2)
-problem.add_field('t2',5,solver=params2)
-problem.add_split('s1',['v1','p1'],solver=schur)
-problem.add_split('s2',['s1','t1'],solver=multi)
-problem.add_split('s3',['v2','p2'],solver=schur)
-problem.add_split('s4',['s3','t2'],solver=multi)
+problem.add_field(0,0,solver=params1)
+problem.add_field(1,1,solver=params2)
+problem.add_field(2,2,solver=params2)
+problem.add_field(3,3,solver=params1)
+problem.add_field(4,4,solver=params2)
+problem.add_field(5,5,solver=params2)
+#problem.add_field('v1',0,solver=params1)
+#problem.add_field('v2',3,solver=params1)
+#problem.add_field('p1',1,solver=params2)
+#problem.add_field('p2',4,solver=params2)
+#problem.add_field('t1',2,solver=params2)
+#problem.add_field('t2',5,solver=params2)
+problem.add_split('s1',[0,1],solver=schur)
+problem.add_split('s2',['s1',2],solver=multi)
+problem.add_split('s3',[3,4],solver=schur)
+problem.add_split('s4',['s3',5],solver=multi)
 problem.add_split('s5',['s2','s4'],solver={"ksp_type":"gmres"})
 PETScOptions.set("ksp_monitor_true_residual")
-PETScOptions.set("ksp_view")
+#PETScOptions.set("ksp_view")
 
 ## Setup block solver ##
-solver = LinearBlockSolver(problem,options_prefix="")
+solver = LinearBlockSolver(problem,options_prefix="",ctx={"HEY":"YOU"})
 solver.solve()

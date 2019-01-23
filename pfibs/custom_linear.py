@@ -4,6 +4,7 @@ from __future__ import print_function
 ## Import dolfin and numpy and time ##
 import dolfin as df
 from petsc4py import PETSc
+from pfibs.app_ctx import AppCtx
 
 ## Check if Dolfin Adjoint is installed ##
 try:
@@ -13,7 +14,7 @@ except ImportError:
     dolfin_adjoint_found = False
 
 class CustomKrylovSolver(df.PETScKrylovSolver):
-    def __init__(self, vbp, options_prefix=""):
+    def __init__(self, vbp, options_prefix="",ctx={}):
         super(CustomKrylovSolver,self).__init__()
         
         ## Initialize field information if it hasn't been done already ##
@@ -41,6 +42,12 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         ## Attach DM ##
         self.ksp().setDM(vbp.dm)
         self.ksp().setDMActive(False)
+
+        ## Check application context ##
+        if not isinstance(ctx,dict):
+            raise TypeError("Solver context must be of type dict()")
+        #self.ctx = ctx
+        self.ctx = AppCtx(ctx)
         
     def init_solver_options(self):
  
@@ -50,13 +57,36 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         ## Create PETSc commandline options if necessary ##
         if self.split_0 != "":
             self.set_fieldsplit(self.split_0, self.options_prefix)
-
+        else:
+            self.ksp().pc.setType(PETSc.PC.Type.FIELDSPLIT)
         ## Set PETSc commandline options ##
         self.ksp().setFromOptions()
+
+        ## Construct the KSP and PC ##
+        #self.ksp().setUp()
+
+        ## Attach application context if necessary ##
+        #if self.ctx:
+        #    print("STOP")
+        #    self.app_ctx(self.ksp())
 
         ## Stop the timer ##
         timer.stop()
     
+    ## Set application context recursively ##
+    def app_ctx(self, ksp):
+        if ksp.pc.getType() == 'fieldsplit':
+            ksp.pc.setUp()
+            ksp_list = ksp.pc.getFieldSplitSubKSP()
+            if len(ksp_list) == 0:
+                raise ValueError("Cannot have zero subKSPs in a fieldsplit")
+            for subksp in ksp_list:
+                self.app_ctx(subksp)
+        else:
+            ksp.setAppCtx(self.ctx)
+            #_, P = ksp.getOperators()
+            #P.setPythonContext(self.ctx)
+
     ## Set fieldsplit solvers via PETScOptions ##
     def set_fieldsplit(self, split_name, prefix, recursion=False):
         
@@ -87,7 +117,7 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
             if block_name[i] in self.block_field:
 
                 ## Assign prefix based on field name ##
-                new_prefix = prefix+"fieldsplit_"+block_name[i]+"_"
+                new_prefix = prefix+"fieldsplit_"+str(block_name[i])+"_"
                 
                 ## Set solver options for the field variable ##
                 for key in self.block_field[block_name[i]][2]:
