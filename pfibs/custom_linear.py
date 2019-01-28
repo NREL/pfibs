@@ -42,6 +42,7 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         ## Attach DM ##
         self.ksp().setDM(vbp.dm)
         self.ksp().setDMActive(False)
+        self.ksp().getDM().setAppCtx(ctx)
 
         ## Check application context ##
         if not isinstance(ctx,dict):
@@ -57,17 +58,16 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         ## Create PETSc commandline options if necessary ##
         if self.split_0 != "":
             self.set_fieldsplit(self.split_0, self.options_prefix)
-        else:
+        elif self.num_fields > 1:
             self.ksp().pc.setType(PETSc.PC.Type.FIELDSPLIT)
         ## Set PETSc commandline options ##
         self.ksp().setFromOptions()
 
         ## Construct the KSP and PC ##
-        #self.ksp().setUp()
+        self.ksp().setUp()
 
         ## Attach application context if necessary ##
         #if self.ctx:
-        #    print("STOP")
         #    self.app_ctx(self.ksp())
 
         ## Stop the timer ##
@@ -83,7 +83,10 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
             for subksp in ksp_list:
                 self.app_ctx(subksp)
         else:
-            ksp.setAppCtx(self.ctx)
+            #ksp.getDM().setAppCtx({'foo':'bar'})
+            #ksp.getDM().view()
+            ctx = ksp.getDM().getAppCtx()
+            print(ctx)
             #_, P = ksp.getOperators()
             #P.setPythonContext(self.ctx)
 
