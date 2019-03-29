@@ -7,8 +7,8 @@ from __future__ import print_function
 
 ## Import preliminaries ##
 from dolfin import *
-import petsc4py
-petsc4py.init('-log_view')
+#import petsc4py
+#petsc4py.init('-log_view')
 from pfibs import *
 from petsc4py import PETSc
 import numpy as np
@@ -126,6 +126,42 @@ L = - dot(v1,n)*p1_left*ds(1) - dot(v2,n)*p2_left*ds(1) \
 #ksp = PETSc.KSP().create()
 #ksp.setDM(dm)
 #ksp.setDMActive(False)
+#PETScOptions.set('ksp_monitor_true_residual')
+PETScOptions.set('ksp_view')
+#PETScOptions.set('ksp_type', 'gmres')
+#PETScOptions.set('pc_type', 'fieldsplit')
+#PETScOptions.set('fieldsplit_s2_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_s2_pc_type', 'fieldsplit')
+#PETScOptions.set('fieldsplit_s2_pc_fieldsplit_type','additive')
+#PETScOptions.set('fieldsplit_s2_fieldsplit_s1_pc_type', 'fieldsplit')
+##PETScOptions.set('fieldsplit_s2_fieldsplit_s1_pc_fieldsplit_type', 'schur')
+##PETScOptions.set('fieldsplit_s2_fieldsplit_s1_pc_fieldsplit_fact_type', 'full')
+##PETScOptions.set('fieldsplit_s2_fieldsplit_s1_pc_fieldsplit_schur_precondition', 'selfp')
+#PETScOptions.set('fieldsplit_s2_fieldsplit_s1_fieldsplit_0_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_s2_fieldsplit_s1_fieldsplit_1_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_s2_fieldsplit_s1_fieldsplit_0_pc_type', 'bjacobi')
+#PETScOptions.set('fieldsplit_s2_fieldsplit_s1_fieldsplit_1_pc_type', 'hypre')
+#PETScOptions.set('fieldsplit_s2_fieldsplit_2_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_s2_fieldsplit_2_pc_type', 'hypre')
+#PETScOptions.set('fieldsplit_s4_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_s4_pc_type', 'fieldsplit')
+#PETScOptions.set('fieldsplit_s4_pc_fieldsplit_type','additive')
+#PETScOptions.set('fieldsplit_s4_fieldsplit_s3_pc_type', 'fieldsplit')
+##PETScOptions.set('fieldsplit_s4_fieldsplit_s3_pc_fieldsplit_type', 'schur')
+##PETScOptions.set('fieldsplit_s4_fieldsplit_s3_pc_fieldsplit_fact_type', 'full')
+##PETScOptions.set('fieldsplit_s4_fieldsplit_s3_pc_fieldsplit_schur_precondition', 'selfp')
+#PETScOptions.set('fieldsplit_s4_fieldsplit_s3_fieldsplit_3_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_s4_fieldsplit_s3_fieldsplit_4_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_s4_fieldsplit_s3_fieldsplit_3_pc_type', 'bjacobi')
+#PETScOptions.set('fieldsplit_s4_fieldsplit_s3_fieldsplit_4_pc_type', 'hypre')
+#PETScOptions.set('fieldsplit_s4_fieldsplit_5_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_s4_fieldsplit_5_pc_type', 'hypre')
+#PETScOptions.set('pc_fieldsplit_s2_fields', '0, 1, 2')
+#PETScOptions.set('pc_fieldsplit_s4_fields', '3, 4, 5')
+#PETScOptions.set('fieldsplit_s2_pc_fieldsplit_s1_fields', '0, 1')
+#PETScOptions.set('fieldsplit_s4_pc_fieldsplit_s3_fields', '0, 1')
+#PETScOptions.set('fieldsplit_s2_pc_fieldsplit_2_fields', '2')
+#PETScOptions.set('fieldsplit_s4_pc_fieldsplit_5_fields', '2')
 #
 #### PETSc Command-line options ##
 #PETScOptions.set('ksp_monitor_true_residual')
@@ -141,13 +177,13 @@ L = - dot(v1,n)*p1_left*ds(1) - dot(v2,n)*p2_left*ds(1) \
 #PETScOptions.set('fieldsplit_0_fieldsplit_0_pc_fieldsplit_type', 'schur')
 #PETScOptions.set('fieldsplit_0_fieldsplit_0_pc_fieldsplit_fact_type', 'full')
 #PETScOptions.set('fieldsplit_0_fieldsplit_0_pc_fieldsplit_schur_precondition', 'selfp')
-#PETScOptions.set('fieldsplit_0_fieldsplit_0_fieldsplit_v1_ksp_type', 'preonly')
-#PETScOptions.set('fieldsplit_0_fieldsplit_0_fieldsplit_p1_ksp_type', 'preonly')
-#PETScOptions.set('fieldsplit_0_fieldsplit_0_fieldsplit_v1_pc_type', 'bjacobi')
-#PETScOptions.set('fieldsplit_0_fieldsplit_0_fieldsplit_p1_pc_type', 'hypre')
+#PETScOptions.set('fieldsplit_0_fieldsplit_0_fieldsplit_0_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_0_fieldsplit_0_fieldsplit_1_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_0_fieldsplit_0_fieldsplit_0_pc_type', 'bjacobi')
+#PETScOptions.set('fieldsplit_0_fieldsplit_0_fieldsplit_1_pc_type', 'hypre')
 #PETScOptions.set('fieldsplit_0_pc_fieldsplit_1_fields', '2')
-#PETScOptions.set('fieldsplit_0_fieldsplit_t1_ksp_type', 'preonly')
-#PETScOptions.set('fieldsplit_0_fieldsplit_t1_pc_type', 'hypre')
+#PETScOptions.set('fieldsplit_0_fieldsplit_2_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_0_fieldsplit_2_pc_type', 'hypre')
 #PETScOptions.set('pc_fieldsplit_1_fields', '3, 4, 5')
 #PETScOptions.set('fieldsplit_1_ksp_type', 'preonly')
 #PETScOptions.set('fieldsplit_1_pc_type', 'fieldsplit')
@@ -157,13 +193,13 @@ L = - dot(v1,n)*p1_left*ds(1) - dot(v2,n)*p2_left*ds(1) \
 #PETScOptions.set('fieldsplit_1_fieldsplit_0_pc_fieldsplit_type', 'schur')
 #PETScOptions.set('fieldsplit_1_fieldsplit_0_pc_fieldsplit_fact_type', 'full')
 #PETScOptions.set('fieldsplit_1_fieldsplit_0_pc_fieldsplit_schur_precondition', 'selfp')
-#PETScOptions.set('fieldsplit_1_fieldsplit_0_fieldsplit_v2_ksp_type', 'preonly')
-#PETScOptions.set('fieldsplit_1_fieldsplit_0_fieldsplit_p2_ksp_type', 'preonly')
-#PETScOptions.set('fieldsplit_1_fieldsplit_0_fieldsplit_v2_pc_type', 'bjacobi')
-#PETScOptions.set('fieldsplit_1_fieldsplit_0_fieldsplit_p2_pc_type', 'hypre')
+#PETScOptions.set('fieldsplit_1_fieldsplit_0_fieldsplit_3_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_1_fieldsplit_0_fieldsplit_4_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_1_fieldsplit_0_fieldsplit_3_pc_type', 'bjacobi')
+#PETScOptions.set('fieldsplit_1_fieldsplit_0_fieldsplit_4_pc_type', 'hypre')
 #PETScOptions.set('fieldsplit_1_pc_fieldsplit_1_fields', '2')
-#PETScOptions.set('fieldsplit_1_fieldsplit_t2_ksp_type', 'preonly')
-#PETScOptions.set('fieldsplit_1_fieldsplit_t2_pc_type', 'hypre')
+#PETScOptions.set('fieldsplit_1_fieldsplit_5_ksp_type', 'preonly')
+#PETScOptions.set('fieldsplit_1_fieldsplit_5_pc_type', 'hypre')
 #
 ### Solve ##
 #ksp.setOperators(A.mat())
@@ -178,8 +214,9 @@ params1 = {
     "pc_type":"bjacobi"
 }
 params2 = {
-    "ksp_type":"preonly",
-    "pc_type":"hypre"
+    "ksp_type":"gmres",
+    "pc_type":"hypre",
+    "ksp_monitor_true_residual": False
 }
 multi = {
     "ksp_type":"preonly",
@@ -188,30 +225,24 @@ multi = {
 schur = {
     "ksp_type":"preonly",
     "pc_fieldsplit_type":"schur",
-    "pc_fieldsplit_fact_type":"full",
+    "pc_fieldsplit_schur_fact_type":"full",
     "pc_fieldsplit_schur_precondition":"selfp"
 }
 problem = BlockProblem(a,L,w,bcs=[])
-problem.add_field(0,0,solver=params1)
-problem.add_field(1,1,solver=params2)
-problem.add_field(2,2,solver=params2)
-problem.add_field(3,3,solver=params1)
-problem.add_field(4,4,solver=params2)
-problem.add_field(5,5,solver=params2)
-#problem.add_field('v1',0,solver=params1)
-#problem.add_field('v2',3,solver=params1)
-#problem.add_field('p1',1,solver=params2)
-#problem.add_field('p2',4,solver=params2)
-#problem.add_field('t1',2,solver=params2)
-#problem.add_field('t2',5,solver=params2)
-problem.add_split('s1',[0,1],solver=schur)
-problem.add_split('s2',['s1',2],solver=multi)
-problem.add_split('s3',[3,4],solver=schur)
-problem.add_split('s4',['s3',5],solver=multi)
-problem.add_split('s5',['s2','s4'],solver={"ksp_type":"gmres"})
+problem.add_field('0',0,solver=params1)
+problem.add_field('1',1,solver=params2)
+problem.add_field('2',2,solver=params2)
+problem.add_field('3',3,solver=params1)
+problem.add_field('4',4,solver=params2)
+problem.add_field('5',5,solver=params2)
+problem.add_split('s1',['0','1'],solver=schur)
+problem.add_split('s2',['s1','2'],solver=multi)
+problem.add_split('s3',['3','4'],solver=schur)
+problem.add_split('s4',['s3','5'],solver=multi)
+problem.add_split('s5',['s2','s4'],solver={"ksp_type":"fgmres"})
 PETScOptions.set("ksp_monitor_true_residual")
-#PETScOptions.set("ksp_view")
+PETScOptions.set("ksp_converged_reason")
 
 ## Setup block solver ##
-solver = LinearBlockSolver(problem,options_prefix="",ctx={"HEY":"YOU"})
+solver = LinearBlockSolver(problem)
 solver.solve()

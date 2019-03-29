@@ -25,7 +25,10 @@ class PCD_BRM1(object, metaclass=abc.ABCMeta):
 
     ## PETSc method, either initialize or update the PC ##
     def setUp(self, pc):
-        self.build(pc)
+        #self.build(pc)
+        print("HE1")
+        ctx = self.pc.getKSP().getDM().getAppCtx()
+        print(ctx)
         self.initialize(pc)
         #print(self.hi)
         #exit()

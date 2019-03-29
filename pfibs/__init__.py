@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright (C) 2018 NREL
+# Copyright (C) 2019 NREL
 # Other licensing stuff, blah blah blah
 
 
@@ -12,8 +12,7 @@ PETSc.Sys.pushErrorHandler("traceback")
 del SubSystemsManager, PETSc
 
 # Import public API
-from pfibs.app_ctx import AppCtx
-from pfibs.block_preconditioners import PCD_BRM1, MyPCD, UvahLiuWu, Elman, Pre_Laplace
+#from pfibs.block_preconditioners import PCD_BRM1, MyPCD, UvahLiuWu, Elman, Pre_Laplace
 from pfibs.custom_linear import CustomKrylovSolver
 from pfibs.custom_nonlinear import NLP, NS
 from pfibs.block_problem import BlockProblem
