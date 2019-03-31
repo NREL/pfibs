@@ -3,7 +3,12 @@ from __future__ import print_function
 
 ## Import dolfin and numpy and time ##
 import dolfin as df
+import numpy as np
 from petsc4py import PETSc
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = MPI.COMM_WORLD.Get_rank()
+size = MPI.COMM_WORLD.Get_size()
 
 ## Check if Dolfin Adjoint is installed ##
 try:
@@ -13,13 +18,14 @@ except ImportError:
     dolfin_adjoint_found = False
 
 class CustomKrylovSolver(df.PETScKrylovSolver):
-    def __init__(self, vbp, options_prefix="",ctx={}):
+    def __init__(self, vbp, options_prefix="",solver={},ctx={}):
         super(CustomKrylovSolver,self).__init__()
         
         ## Initialize field information if it hasn't been done already ##
         self.finalize_field = vbp.finalize_field
         if not self.finalize_field:
-            vbp.setUpFields()
+            vbp.setup_fields()
+        self.field_size = vbp.field_size
         self.num_fields = vbp.num_fields
         self.block_field = vbp.block_field
 
@@ -40,22 +46,28 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         
         ## Obtain DM and block problem ##
         self.dm = vbp.dm
+        self.section = vbp.section
         self.vbp = vbp
+        
+        ## Check solver parameters ##
+        if not isinstance(solver,dict):
+            raise TypeError("Solver parameters must be of type dict()")
+        self.solver = solver
         
         ## Check application context ##
         if not isinstance(ctx,dict):
             raise TypeError("Solver context must be of type dict()")
         self.ctx = ctx
         
-    def init_solver_options(self):
- 
-        ## Start the timer ##
-        timer = df.Timer("pFibs: Setup Solver Options")
-        
         ## Attach DM and application context ##
         self.ksp().setDM(self.dm)
         self.ksp().setDMActive(False)
         self.ksp().setAppCtx(self.ctx)
+        
+    def init_solver_options(self):
+ 
+        ## Start the timer ##
+        timer = df.Timer("pFibs: Setup Solver Options")
 
         ## Set fieldsplit if add_split() not utilized ##
         if self.split_0 == "" and self.num_fields > 1:
@@ -64,10 +76,15 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         ## Setup the PC ##
         self.ksp().setUp()
 
-        ## Construct fieldsplits ##
-        if self.split_0 != "" and self.num_fields > 1:
-            self.create_fieldsplit(self.options_prefix,self.split_0,self.ksp(),True)
+        ## Manually construct fieldsplits ##
+        if self.split_0 != "" and not self.solver:
+            self._set_fieldsplit(self.options_prefix,self.split_0,self.ksp(),True)
         
+        ## Setup all solver and fieldsplit options via solver dict ##
+        ## NOTE: this will override all field/split parameters     ##
+        elif self.solver:
+            self._set_petsc_options(self.options_prefix,self.block_field[sub_field_array[i][0]][2])
+
         ## Set PETSc commandline options ##
         self.ksp().setFromOptions()
 
@@ -75,19 +92,14 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         timer.stop()
     
     ## Create fieldsplit ##
-    def create_fieldsplit(self, prefix, split_name, subKSP, setpc=True):
+    def _set_fieldsplit(self, prefix, split_name, subKSP, setpc=True):
         
         ## Obtain block information for this split ##
-        block_name = self.block_split[split_name][0]
-        block_solvers = self.block_split[split_name][1]
-        n = len(block_name)
-
-        ## List of all fields in total ##
-        field_array = []
-        
-        ## List of all fields per split ##
-        sub_field_array = []
-        
+        block_name = self.block_split[split_name][0]    # Name of the split
+        block_solvers = self.block_split[split_name][1] # Solver parameters associated with the split
+        n = len(block_name)                             # Number of blocks this split creates
+        field_array = []                                # Flattened list of all fields 
+        sub_field_array = []                            # List of all fields or subspits per split 
 
         ## Step 1: find all fields and splits   
         for i in range(n):
@@ -103,7 +115,7 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
             elif block_name[i] in self.block_split:
 
                 ## Flatten list of fields in this split ##
-                nested_field_array = self.create_fieldsplit("",block_name[i],subKSP,False)
+                nested_field_array = self._set_fieldsplit("",block_name[i],subKSP,False)
                 
                 ## Update the lists ##
                 if isinstance(nested_field_array,list):
@@ -114,7 +126,7 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
             else:
                 raise ValueError("Block '%s' not found in the field/split dicts" %(block_name[i]))
         
-        ## Step 2: create PCFieldSplit ##
+        ## Optional step 2: create PCFieldSplit ##
         if setpc:
             
             ## Set the fieldsplit ##
@@ -124,21 +136,20 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
             use_schur = self.block_split[split_name][1].get("pc_fieldsplit_type",False)
             if use_schur == 'schur':
                 subKSP.pc.setFieldSplitType(PETSc.PC.CompositeType.SCHUR)
-            
                        
-            ## Assign fields to the splits ##
-            assignIS = self.vbp.subIS(sub_field_array,field_array)
-            subKSP.pc.setFieldSplitIS(*assignIS)
+            ## Assign field index sets to the splits ##
+            agg_IS = self._extract_IS(sub_field_array,field_array)
+            subKSP.pc.setFieldSplitIS(*agg_IS)
             
             ## Set solver parameters for split ##
-            self.set_fieldsplit_options(prefix,block_solvers)
+            self._set_petsc_options(prefix,block_solvers)
             
             ## Set solver parameters for individual fields if necessary ##
             for i in range(n):
                 if sub_field_array[i][0] in self.block_field:
                     # Assign prefix based on field name ##
                     new_prefix = prefix+"fieldsplit_"+sub_field_array[i][0]+"_"
-                    self.set_fieldsplit_options(new_prefix,self.block_field[sub_field_array[i][0]][2])
+                    self._set_petsc_options(new_prefix,self.block_field[sub_field_array[i][0]][2])
             
             ## Setup the PC and solver options ##
             subKSP.setFromOptions()
@@ -160,14 +171,74 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
 
                 ## Recursive fieldsplit if necessary ##
                 if sub_field_array[i][0] in self.block_split:
-                    self.create_fieldsplit(prefix+"fieldsplit_"+sub_field_array[i][0]+"_",
+                    self._set_fieldsplit(prefix+"fieldsplit_"+sub_field_array[i][0]+"_",
                             sub_field_array[i][0],subSubKSP[i],True)
         
         ## Return list of all fields in this split ##
         return field_array
 
-    ## Set the PETScOptions for fieldsplit parameters ##
-    def set_fieldsplit_options(self,prefix,solver_params):
+    ## Extract index sets for fieldsplit ##
+    def _extract_IS(self,sub_field_array,full_field_array):
+        num_sub_fields = len(sub_field_array)
+        sub_field_indx = np.zeros((num_sub_fields,),dtype=np.int32)
+        ISarray = np.array([],dtype=np.int32)
+        ISsplit = np.zeros(num_sub_fields-1,dtype=np.int32)
+        total_field_indx = 0
+
+        ## Allocate the numpy arrays ##
+        for i in range(num_sub_fields):
+            dof_sum = 0
+            if isinstance(sub_field_array[i][1],int):
+                dof_sum = self.field_size[sub_field_array[i][1]]
+            else:
+                for field in sub_field_array[i][1]:
+                    dof_sum += self.field_size[field]
+            ISarray = np.append(ISarray,np.zeros(dof_sum,dtype=np.int32))
+            if i == 0:
+                ISsplit[0] = dof_sum
+            elif i < num_sub_fields - 1:
+                ISsplit[i] = dof_sum + ISsplit[i-1]
+        ISarray = np.split(ISarray,ISsplit)
+
+        ## Iterate through Section Chart ##
+        pstart,pend = self.section.getChart()
+        dofChart = np.arange(pstart,pend)
+        for i in np.nditer(dofChart):
+            for field in full_field_array:
+                ## Check if this DoF is associated with the given field ##
+                numDof = self.section.getFieldDof(i,field)
+
+                ## If it is, find which sub field array it belongs to ##
+                if numDof > 0:
+                    found_field = False
+                    for j in range(num_sub_fields):
+                        if isinstance(sub_field_array[j][1],int):
+                            if field == sub_field_array[j][1]:
+                                found_field = True
+                        elif field in sub_field_array[j][1]:
+                            found_field = True
+                        if found_field:
+                            ISarray[j][sub_field_indx[j]] = total_field_indx
+                            sub_field_indx[j] += 1
+                            total_field_indx += 1
+                            break
+                    if not found_field:
+                        raise ValueError("field ID %d not found in fieldsplit array" %field)
+                    else:
+                        break
+
+        ## Global offsets communicated via MPI_Scan ##
+        goffset = comm.scan(total_field_indx) - total_field_indx
+
+        # Create PETSc IS #
+        agg_IS = []
+        for i in range(num_sub_fields):
+            ISset = np.add(ISarray[i],goffset)
+            agg_IS.append((sub_field_array[i][0],PETSc.IS().createGeneral([ISset])))
+        return agg_IS
+
+    ## Set PETScOptions parameters ##
+    def _set_petsc_options(self,prefix,solver_params):
         for key in solver_params:
             if type(solver_params[key]) is bool:
                 if solver_params[key] is True:
@@ -175,7 +246,8 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
             elif solver_params[key] is not None:
                 df.PETScOptions.set(prefix+key,solver_params[key])
         
-
+### This stuff is not needed anymore. Keeping it here for future reference ###
+#
 #    def set_pc_type(self,*args):
 #        ## This method takes either a string or an int and string. Providing just a string      ##
 #        ## attempts to set the pc of the full system. Providing a int and a string attempts to  ##

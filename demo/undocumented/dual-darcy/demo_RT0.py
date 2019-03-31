@@ -127,7 +127,7 @@ L = - dot(v1,n)*p1_left*ds(1) - dot(v2,n)*p2_left*ds(1) \
 #ksp.setDM(dm)
 #ksp.setDMActive(False)
 #PETScOptions.set('ksp_monitor_true_residual')
-PETScOptions.set('ksp_view')
+#PETScOptions.set('ksp_view')
 #PETScOptions.set('ksp_type', 'gmres')
 #PETScOptions.set('pc_type', 'fieldsplit')
 #PETScOptions.set('fieldsplit_s2_ksp_type', 'preonly')
@@ -208,7 +208,6 @@ PETScOptions.set('ksp_view')
 #ksp.solve(b.vec(),w.vector().vec())
 
 ## Setup block problem ##
-#block_structure = [['u1',[0]],['p1',[1]],['u2',[2]],['p2',[3]]]
 params1 = {
     "ksp_type":"preonly",
     "pc_type":"bjacobi"
@@ -216,7 +215,6 @@ params1 = {
 params2 = {
     "ksp_type":"gmres",
     "pc_type":"hypre",
-    "ksp_monitor_true_residual": False
 }
 multi = {
     "ksp_type":"preonly",
@@ -229,17 +227,18 @@ schur = {
     "pc_fieldsplit_schur_precondition":"selfp"
 }
 problem = BlockProblem(a,L,w,bcs=[])
-problem.add_field('0',0,solver=params1)
-problem.add_field('1',1,solver=params2)
-problem.add_field('2',2,solver=params2)
-problem.add_field('3',3,solver=params1)
-problem.add_field('4',4,solver=params2)
-problem.add_field('5',5,solver=params2)
-problem.add_split('s1',['0','1'],solver=schur)
-problem.add_split('s2',['s1','2'],solver=multi)
-problem.add_split('s3',['3','4'],solver=schur)
-problem.add_split('s4',['s3','5'],solver=multi)
-problem.add_split('s5',['s2','s4'],solver={"ksp_type":"fgmres"})
+problem.field('0',0,solver=params1)
+problem.field('1',1,solver=params2)
+eroblem.feld('1',1,solver=params2)
+problem.field('2',2,solver=params2)
+problem.field('3',3,solver=params1)
+problem.field('4',4,solver=params2)
+problem.field('5',5,solver=params2)
+problem.split('s1',['0','1'],solver=schur)
+problem.split('s2',['s1','2'],solver=multi)
+problem.split('s3',['3','4'],solver=schur)
+problem.split('s4',['s3','5'],solver=multi)
+problem.split('s5',['s2','s4'],solver={"ksp_type":"fgmres"})
 PETScOptions.set("ksp_monitor_true_residual")
 PETScOptions.set("ksp_converged_reason")
 

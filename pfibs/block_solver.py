@@ -14,13 +14,14 @@ except ImportError:
     dolfin_adjoint_found = False
 
 class LinearBlockSolver(object):
-    def __init__(self, vbp, options_prefix="", comm=None, ctx={}):
+    def __init__(self, vbp, options_prefix="", solver={}, ctx={}):
         self.a = vbp.a
         self.aP = vbp.aP
         self.L = vbp.L
         self.bcs = vbp.bcs
         self.u = vbp.u
-        self.linear_solver = CustomKrylovSolver(vbp,options_prefix=options_prefix,ctx=ctx)
+        self.linear_solver = CustomKrylovSolver(vbp,options_prefix=options_prefix,
+                                                solver=solver,ctx=ctx)
 
         self.A = df.PETScMatrix()
         self.b = df.PETScVector()
@@ -72,14 +73,15 @@ class LinearBlockSolver(object):
         return its
 
 class NonlinearBlockSolver(object):
-    def __init__(self, vbp, options_prefix="", comm=None, ctx={}):         
+    def __init__(self, vbp, options_prefix="", solver={}, ctx={}):         
         self.a = vbp.a
         self.aP = vbp.aP
         self.L = vbp.L
         self.bcs = vbp.bcs
         self.u = vbp.u
         self.ident_zeros = vbp.ident_zeros
-        self.linear_solver = CustomKrylovSolver(vbp,options_prefix=options_prefix,ctx=ctx)
+        self.linear_solver = CustomKrylovSolver(vbp,options_prefix=options_prefix,
+                                                solver=solver,ctx=ctx)
         self.newton_solver = NS(self.linear_solver)
 
         self._init_nlp = False

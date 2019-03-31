@@ -5,10 +5,7 @@ from __future__ import print_function
 import dolfin as df
 import numpy as np
 from petsc4py import PETSc
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
-rank = MPI.COMM_WORLD.Get_rank()
-size = MPI.COMM_WORLD.Get_size()
+
 ## Optionally import dolfin_adjoint ##
 try:
     import dolfin_adjoint as dfa 
@@ -32,7 +29,7 @@ class BlockProblem(object):
         self.annotate = kwargs.get("annotate",False)
         self.adjoint = kwargs.get("adjoint",False)
         self.ident_zeros = kwargs.get("ident_zeros",False)
-
+        
         ## Extract the Function Space ##
         self.V  = self.u.function_space()
         self.dofs = np.array(self.u.function_space().dofmap().dofs())
@@ -51,7 +48,7 @@ class BlockProblem(object):
             raise RuntimeError("Dolfin-adjoint is not installed")
     
     ## Add a field to the block problem ##
-    def add_field(self, *args, **kwargs):
+    def field(self, *args, **kwargs):
         
         ## Check if splits already defined ##
         if self.finalize_field:
@@ -75,7 +72,7 @@ class BlockProblem(object):
         self.num_fields += 1
  
     ## Extract dofs ##
-    def extractDofs(self,key):
+    def _extract_dofs(self,key):
         
         ## If multiple subspaces belong to this field ##
         if isinstance(self.block_field[key][1],list):
@@ -102,78 +99,8 @@ class BlockProblem(object):
         ndof = dofs.size
         return (dofs, ndof)
 
-    ## Return index numbering for fieldsplits ##
-    def subIS(self,sub_field_array,full_field_array):
-        num_sub_fields = len(sub_field_array)
-        sub_field_indx = np.zeros((num_sub_fields,),dtype=np.int32)
-        ISarray = np.array([],dtype=np.int32)
-        ISsplit = np.zeros(num_sub_fields-1,dtype=np.int32)
-        total_field_indx = 0
-
-        ## Allocate the numpy arrays ##
-        for i in range(num_sub_fields):
-            dof_sum = 0
-            if isinstance(sub_field_array[i][1],int):
-                dof_sum = self.field_size[sub_field_array[i][1]]
-            else:
-                for field in sub_field_array[i][1]:
-                    dof_sum += self.field_size[field]
-            ISarray = np.append(ISarray,np.zeros(dof_sum,dtype=np.int32))
-            if i == 0:
-                ISsplit[0] = dof_sum
-            elif i < num_sub_fields - 1:
-                ISsplit[i] = dof_sum + ISsplit[i-1]
-        ISarray = np.split(ISarray,ISsplit)
-
-        ## Iterate through Section Chart ##
-        pstart,pend = self.section.getChart()
-        dofChart = np.arange(pstart,pend)
-        for i in np.nditer(dofChart):
-            increment = 0
-            for field in full_field_array: 
-                ## Check if this DoF is associated with the given field ##
-                numDof = self.section.getFieldDof(i,field)
-                
-                ## If it is, find which sub field array it belongs to ##
-                if numDof > 0:
-                    #if rank == 1:
-                    found_field = False
-                    for j in range(num_sub_fields):
-                        if isinstance(sub_field_array[j][1],int):
-                            if field == sub_field_array[j][1]:
-                                found_field = True
-                        elif field in sub_field_array[j][1]:
-                            found_field = True
-                        if found_field:
-                            ISarray[j][sub_field_indx[j]] = total_field_indx #+ self.goffset
-                            sub_field_indx[j] += 1
-                            total_field_indx += 1
-                            break
-                    if not found_field:
-                        raise ValueError("field ID %d not found in fieldsplit array" %field)
-                    else:
-                        break
-        
-        ## Global offsets ##
-        goffset = 0
-        if size > 1:
-            if rank == 0:
-                comm.send(total_field_indx, dest=1)
-            elif rank == size - 1:
-                goffset = comm.recv(source=rank-1)
-            else:
-                goffset = comm.recv(source=rank-1)
-                comm.send(total_field_indx+goffset,dest=rank+1)
-        
-        # Create PETSc IS #
-        Agg_IS = []
-        for i in range(num_sub_fields):
-            ISset = np.add(ISarray[i],goffset)
-            Agg_IS.append((sub_field_array[i][0],PETSc.IS().createGeneral([ISset])))
-        return Agg_IS
-       
     ## Set up the fields ##
-    def setUpFields(self):
+    def setup_fields(self):
         
         ## Default if empty ##
         if not self.block_field:
@@ -192,7 +119,7 @@ class BlockProblem(object):
             self.section.setFieldName(self.block_field[key][0],str(key))
             
             ## Extract dofs ##
-            (dofs, ndof) = self.extractDofs(key)
+            (dofs, ndof) = self._extract_dofs(key)
             
             ## Record dof count for each field ##
             self.field_size.update({self.block_field[key][0]:ndof})
@@ -212,11 +139,11 @@ class BlockProblem(object):
         self.finalize_field = True
 
     ## Add a split to the block problem ##
-    def add_split(self, *args, **kwargs):
+    def split(self, *args, **kwargs):
 
         ## Setup fields ##
         if not self.finalize_field:
-            self.setUpFields()
+            self.setup_fields()
 
         ## Required input ##
         split_name = args[0]
@@ -246,10 +173,10 @@ class BlockProblem(object):
         self.block_split.update({split_name:[split_fields,solver_params]})
 
         ## Update/override as the first split ##
-        self.first_split(split_name)
+        self._first_split(split_name)
 
     ## Define the first split ##
-    def first_split(self, split_name):
+    def _first_split(self, split_name):
         if not split_name in self.block_split:
             raise ValueError("First split '%s' not defined" %(split_name))
         else:
