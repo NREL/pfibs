@@ -7,9 +7,8 @@ from numpy import array, where, zeros
 from petsc4py import PETSc
 from mpi4py import MPI
 import copy
-import abc
 
-class PCD_BRM1(object, metaclass=abc.ABCMeta):
+class PCD_BRM1(object):
     #def __init__(self):
         ## This preconditioner will preform:        ##
         ##                                          ##
@@ -19,7 +18,6 @@ class PCD_BRM1(object, metaclass=abc.ABCMeta):
     #    super(PCD_BRM1, self).__init__()
 
     ## User is required to implement the following ##
-    @abc.abstractmethod
     def build(self):
         pass
 

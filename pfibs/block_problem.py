@@ -72,7 +72,7 @@ class BlockProblem(object):
         self.num_fields += 1
  
     ## Extract dofs ##
-    def _extract_dofs(self,key):
+    def extract_dofs(self,key):
         
         ## If multiple subspaces belong to this field ##
         if isinstance(self.block_field[key][1],list):
@@ -119,7 +119,7 @@ class BlockProblem(object):
             self.section.setFieldName(self.block_field[key][0],str(key))
             
             ## Extract dofs ##
-            (dofs, ndof) = self._extract_dofs(key)
+            (dofs, ndof) = self.extract_dofs(key)
             
             ## Record dof count for each field ##
             self.field_size.update({self.block_field[key][0]:ndof})

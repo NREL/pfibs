@@ -58,6 +58,9 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         if not isinstance(ctx,dict):
             raise TypeError("Solver context must be of type dict()")
         self.ctx = ctx
+
+        ## Attach block problem to context. Used to extract sub matrices ##
+        self.ctx.update({'problem':self.vbp})
         
         ## Attach DM and application context ##
         self.ksp().setDM(self.dm)
@@ -69,21 +72,13 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         ## Start the timer ##
         timer = df.Timer("pFibs: Setup Solver Options")
 
-        ## Set fieldsplit if add_split() not utilized ##
-        if self.split_0 == "" and self.num_fields > 1:
-            self.ksp().pc.setType(PETSc.PC.Type.FIELDSPLIT)
-
-        ## Setup the PC ##
-        self.ksp().setUp()
-
-        ## Manually construct fieldsplits ##
-        if self.split_0 != "" and not self.solver:
+        ## Manuallt construct fieldsplit if more than one field detected ##
+        if self.num_fields > 1 and not self.solver and self.split_0 != "":
             self._set_fieldsplit(self.options_prefix,self.split_0,self.ksp(),True)
         
         ## Setup all solver and fieldsplit options via solver dict ##
-        ## NOTE: this will override all field/split parameters     ##
         elif self.solver:
-            self._set_petsc_options(self.options_prefix,self.block_field[sub_field_array[i][0]][2])
+            self._set_petsc_options(self.options_prefix,self.solver)
 
         ## Set PETSc commandline options ##
         self.ksp().setFromOptions()
@@ -166,14 +161,16 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
             ## Iterate through all sub KSPs ##
             for i in range(n):
 
-                ## Set application context ##
-                subSubKSP[i].setAppCtx(self.ctx)
-
                 ## Recursive fieldsplit if necessary ##
                 if sub_field_array[i][0] in self.block_split:
                     self._set_fieldsplit(prefix+"fieldsplit_"+sub_field_array[i][0]+"_",
                             sub_field_array[i][0],subSubKSP[i],True)
-        
+                ## Set application context ##
+                else:
+                    subctx = {}
+                    subctx.update(self.ctx)
+                    subctx.update({'field_name':sub_field_array[i][0]})
+                    subSubKSP[i].setAppCtx(subctx)
         ## Return list of all fields in this split ##
         return field_array
 

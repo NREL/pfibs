@@ -229,7 +229,7 @@ schur = {
 problem = BlockProblem(a,L,w,bcs=[])
 problem.field('0',0,solver=params1)
 problem.field('1',1,solver=params2)
-eroblem.feld('1',1,solver=params2)
+problem.field('1',1,solver=params2)
 problem.field('2',2,solver=params2)
 problem.field('3',3,solver=params1)
 problem.field('4',4,solver=params2)

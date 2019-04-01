@@ -41,19 +41,26 @@ G = BoundarySource(mesh, degree=2)
 bc = DirichletBC(W.sub(0), G, boundary)
 
 ## Setup block problem ##
-block_structure = [['u',[0]],['p',[1]]]
-problem = BlockProblem(a,L,w,bcs=bc,block_structure=block_structure)
+problem = BlockProblem(a,L,w,bcs=bc)
 
 ## Built-in function calls ##
-problem.SchurType('selfp')
-problem.SubKSPType('u','preonly')
-problem.SubKSPType('p','preonly')
-problem.SubPCType('u','bjacobi')
-problem.SubPCType('p','hypre')
-
-## PETSc Command-line options ##
-PETScOptions.set('ksp_monitor_true_residual')
-PETScOptions.set('ksp_converged_reason')
+problem.field('u',0,solver={
+    'ksp_type':'preonly',
+    'pc_type':'bjacobi'
+    })
+problem.field('p',1,solver={
+    'ksp_type':'preonly',
+    'pc_type':'hypre'
+    })
+problem.split('s1',['u','p'],solver={
+    'ksp_type':'gmres',
+    'pc_fieldsplit_type':'schur',
+    'pc_fieldsplit_schur_fact_type':'full',
+    'pc_fieldsplit_schur_precondition':'selfp',
+    'ksp_monitor_true_residual':True,
+    'ksp_view':True,
+    'ksp_converged_reason':True
+    })
 
 ## Setup block solver ##
 solver = LinearBlockSolver(problem)
