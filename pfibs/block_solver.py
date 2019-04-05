@@ -42,7 +42,11 @@ class LinearBlockSolver(object):
         ## Assemble preconditioner if provided ##
         if self.aP is not None:
             df.assemble(self.aP,tensor=self.P)
-            self.bcs.apply(self.P)
+            if isinstance(self.bcs,list):
+                for bc in self.bcs:
+                    bc.apply(self.P)
+            else:
+                self.bcs.apply(self.P)
 
         ## Stop the timer ##
         timer.stop()
@@ -92,8 +96,14 @@ class NonlinearBlockSolver(object):
         timer = df.Timer("pFibs: Apply BCS")
 
         ## Assembly system of equations ##
-        for bc in self.bcs:
-            bc.apply(self.u.vector())
+        if isinstance(self.bcs,list):
+            for bc in self.bcs:
+                bc.apply(self.u.vector())
+                bc0 = df.DirichletBC(bc)
+                bc0.homogenize()
+                self.bcs_u.append(bc0)
+        else:
+            self.bcs.apply(self.u.vector())
             bc0 = df.DirichletBC(bc)
             bc0.homogenize()
             self.bcs_u.append(bc0)

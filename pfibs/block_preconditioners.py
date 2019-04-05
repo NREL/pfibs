@@ -2,11 +2,113 @@
 from __future__ import print_function
 
 ## Import dolfin and numpy and time ##
-from dolfin import PETScMatrix, PETScVector, assemble, Timer
+from dolfin import PETScMatrix, PETScOptions, PETScVector, assemble, Timer
 from numpy import array, where, zeros
 from petsc4py import PETSc
 from mpi4py import MPI
 import copy
+
+class PythonPC(object):
+    def __init__(self):
+
+        self.initialized = False
+        self.update_pc = False
+        super(PythonPC, self).__init__()
+
+    ## Setup, do not override ##
+    def setUp(self, pc):
+        if self.initialized:
+            if self.update_pc:
+                self.update(pc)
+        else:
+            ## Check for pc_type ##
+            if pc.getType() != "python":
+                raise ValueError("Expecting PC type python")
+
+            ## Extract the application context ##
+            self.ctx = pc.getDM().getAppCtx()
+            
+            ## Extract the Index Set ##
+            self.vbp = self.ctx['problem']
+            self.dofs,_ = self.vbp.extract_dofs(self.ctx['field_name'])
+            self.isset = PETSc.IS().createGeneral(list(self.dofs))
+            
+
+            ## Determine whether to update the pc or not
+            if 'update' in self.ctx:
+                self.update_pc = self.ctx['update']
+            else:
+                self.update_pc = False
+			
+
+            ## Create KSP object
+            self.initialize(pc)
+            self.initialized = True
+    
+    ## Can override ##
+    def initialize(self, pc):
+        
+        ## Assemble aP ##
+        self.P_mat = PETScMatrix()
+        if 'aP' not in self.ctx:
+            raise ValueError("Must provide aP form to ctx")
+        else:
+            self.aP = self.ctx['aP']
+            assemble(self.aP, tensor=self.P_mat)
+
+        ## Optionally apply BCs ##
+        if 'bcs_aP' in self.ctx:
+            bcs_aP = self.ctx['bcs_aP']
+            if isinstance(bcs_aP,list):
+                for bc in bcs_aP:
+                    bc.apply(self.P_mat)
+            else:
+                bcs_aP.apply(self.P_mat)
+        
+        ## Extract submatrix ##
+        self.P_submat = self.P_mat.mat().createSubMatrix(self.isset,self.isset)
+        
+        ## Extract options prefix ##
+        self.options_prefix = self.ctx['options_prefix'] + 'pypc_'
+
+        ## Create KSP solver ##
+        self.ksp = PETSc.KSP().create(comm=pc.comm)
+        self.ksp.setType(PETSc.KSP.Type.PREONLY)
+        self.ksp.incrementTabLevel(1, parent=pc)
+        self.ksp.setOperators(self.P_submat)
+        self.ksp.setOptionsPrefix(self.options_prefix)
+		
+		## Process PETScOptions ##
+        if 'pypc_solver' in self.ctx:
+            for key in self.ctx['pypc_solver']:
+                if type(self.ctx['pypc_solver'][key]) is bool:
+                    if self.ctx['pypc_solver'][key] is True:
+                        PETScOptions.set(self.options_prefix+key)
+                elif self.ctx['pypc_solver'][key] is not None:
+                    PETScOptions.set(self.options_prefix+key,self.ctx['pypc_solver'][key])
+
+        self.ksp.setFromOptions()
+        self.ksp.setUp()
+   
+    ## Can override ##
+    def update(self, pc):
+        assemble(self.aP, tensor=self.P_mat)
+        
+        ## Optionally apply BCs ##
+        if 'bcs_aP' in self.ctx:
+            bcs_aP = self.ctx['bcs_aP']
+            if isinstance(bcs_aP,list):
+                for bc in bcs_aP:
+                    bc.apply(self.P_mat)
+            else:
+                bcs_aP.apply(self.P_mat)
+
+        ## Extract submatrix ##
+        self.P_submat = self.P_mat.mat().createSubMatrix(self.isset,self.isset,self.P_submat)
+        
+    ## Can override ##
+    def apply(self, pc, x, y):
+        self.ksp.solve(x,y)
 
 class PCD_BRM1(object):
     #def __init__(self):

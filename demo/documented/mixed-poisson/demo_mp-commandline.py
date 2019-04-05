@@ -42,24 +42,25 @@ G = BoundarySource(mesh, degree=2)
 bc = DirichletBC(W.sub(0), G, boundary)
 
 ## Setup block problem ##
-block_structure = [['u',[0]],['p',[1]]]
-problem = BlockProblem(a,L,w,bcs=bc,block_structure=block_structure)
+problem = BlockProblem(a,L,w,bcs=bc)
 
 ## PETSc Command-line options ##
-PETScOptions.set('ksp_type','gmres')
-PETScOptions.set('pc_type','fieldsplit')
-PETScOptions.set('pc_fieldsplit_type','schur')
-PETScOptions.set('pc_fieldsplit_schur_fact_type','upper')
-PETScOptions.set('pc_fieldsplit_schur_precondition','selfp')
-PETScOptions.set('fieldsplit_u_ksp_type', 'preonly')
-PETScOptions.set('fieldsplit_u_pc_type', 'bjacobi')
-PETScOptions.set('fieldsplit_p_ksp_type', 'preonly')
-PETScOptions.set('fieldsplit_p_pc_type', 'hypre')
-PETScOptions.set('ksp_monitor_true_residual')
-PETScOptions.set('ksp_converged_reason')
+solver = {
+    'ksp_type':'gmres',
+    'pc_type':'fieldsplit',
+    'pc_fieldsplit_type':'schur',
+    'pc_fieldsplit_schur_fact_type':'upper',
+    'pc_fieldsplit_schur_precondition':'selfp',
+    'fieldsplit_0_ksp_type': 'preonly',
+    'fieldsplit_0_pc_type': 'bjacobi',
+    'fieldsplit_1_ksp_type': 'preonly',
+    'fieldsplit_1_pc_type': 'hypre',
+    'ksp_monitor_true_residual': True,
+    'ksp_converged_reason': True
+}
 
 ## Setup block solver ##
-solver = LinearBlockSolver(problem)
+solver = LinearBlockSolver(problem,solver=solver)
 
 ## Solve problem ##
 timer = Timer("Solve Problem")

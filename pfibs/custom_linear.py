@@ -62,26 +62,38 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
         ## Attach block problem to context. Used to extract sub matrices ##
         self.ctx.update({'problem':self.vbp})
         
+        ## Attach the overall solver prefix ##
+        self.ctx.update({'prefix':self.options_prefix})
+
         ## Attach DM and application context ##
+        self.dm.setAppCtx(self.ctx)
         self.ksp().setDM(self.dm)
         self.ksp().setDMActive(False)
         self.ksp().setAppCtx(self.ctx)
+        
+        ## Split DM into subDMs ##
+        _, _, self.subdms = self.dm.createFieldDecomposition()
         
     def init_solver_options(self):
  
         ## Start the timer ##
         timer = df.Timer("pFibs: Setup Solver Options")
 
-        ## Manuallt construct fieldsplit if more than one field detected ##
-        if self.num_fields > 1 and not self.solver and self.split_0 != "":
+        ## Manually construct fieldsplit if more than one field detected ##
+        if not self.solver and self.split_0 != "":
             self._set_fieldsplit(self.options_prefix,self.split_0,self.ksp(),True)
         
-        ## Setup all solver and fieldsplit options via solver dict ##
+        ## Define fieldsplit if no split was called ##
+        elif self.split_0 == "" and self.num_fields > 1 and not self.solver:
+            self.ksp().pc.setType(PETSc.PC.Type.FIELDSPLIT)
+        
+        ## Or setup all solver and fieldsplit options via solver dict ##
         elif self.solver:
             self._set_petsc_options(self.options_prefix,self.solver)
 
         ## Set PETSc commandline options ##
         self.ksp().setFromOptions()
+        self.ksp().setUp()
 
         ## Stop the timer ##
         timer.stop()
@@ -170,7 +182,12 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
                     subctx = {}
                     subctx.update(self.ctx)
                     subctx.update({'field_name':sub_field_array[i][0]})
-                    subSubKSP[i].setAppCtx(subctx)
+                    subctx.update({'options_prefix':prefix+"fieldsplit_"+sub_field_array[i][0]+"_"})
+                    subdm = self.subdms[self.block_field[sub_field_array[i][0]][0]]
+                    subdm.setAppCtx(subctx)
+                    subSubKSP[i].setDM(subdm)
+                    subSubKSP[i].setDMActive(False)
+        
         ## Return list of all fields in this split ##
         return field_array
 
