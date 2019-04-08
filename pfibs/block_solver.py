@@ -14,15 +14,20 @@ except ImportError:
     dolfin_adjoint_found = False
 
 class LinearBlockSolver(object):
-    def __init__(self, vbp, options_prefix=None, comm=None):
+    def __init__(self, vbp, options_prefix="", solver={}, ctx={}):
         self.a = vbp.a
+        self.aP = vbp.aP
         self.L = vbp.L
         self.bcs = vbp.bcs
         self.u = vbp.u
-        self.linear_solver = CustomKrylovSolver(vbp,options_prefix)
+        self.linear_solver = CustomKrylovSolver(vbp,options_prefix=options_prefix,
+                                                solver=solver,ctx=ctx)
 
         self.A = df.PETScMatrix()
         self.b = df.PETScVector()
+
+        if self.aP is not None:
+            self.P = df.PETScMatrix()
 
     def assemble(self):
         ## Start the timer ##
@@ -34,6 +39,15 @@ class LinearBlockSolver(object):
         #else:
         df.assemble_system(self.a,self.L,self.bcs,A_tensor=self.A,b_tensor=self.b)
 
+        ## Assemble preconditioner if provided ##
+        if self.aP is not None:
+            df.assemble(self.aP,tensor=self.P)
+            if isinstance(self.bcs,list):
+                for bc in self.bcs:
+                    bc.apply(self.P)
+            else:
+                self.bcs.apply(self.P)
+
         ## Stop the timer ##
         timer.stop()
         
@@ -44,8 +58,11 @@ class LinearBlockSolver(object):
         ## Assemble ##
         self.assemble()
 
-        # ## Setup solver operators and options ##
-        self.linear_solver.set_operator(self.A)
+        ## Setup solver operators and options ##
+        if self.aP is not None:
+            self.linear_solver.set_operators(self.A,self.P)
+        else:
+            self.linear_solver.set_operators(self.A,self.A)
         self.linear_solver.init_solver_options()
         
         ## Start the timer ##
@@ -60,13 +77,15 @@ class LinearBlockSolver(object):
         return its
 
 class NonlinearBlockSolver(object):
-    def __init__(self, vbp, options_prefix=None, comm=None):         
+    def __init__(self, vbp, options_prefix="", solver={}, ctx={}):         
         self.a = vbp.a
+        self.aP = vbp.aP
         self.L = vbp.L
         self.bcs = vbp.bcs
         self.u = vbp.u
         self.ident_zeros = vbp.ident_zeros
-        self.linear_solver = CustomKrylovSolver(vbp,options_prefix)
+        self.linear_solver = CustomKrylovSolver(vbp,options_prefix=options_prefix,
+                                                solver=solver,ctx=ctx)
         self.newton_solver = NS(self.linear_solver)
 
         self._init_nlp = False
@@ -77,8 +96,14 @@ class NonlinearBlockSolver(object):
         timer = df.Timer("pFibs: Apply BCS")
 
         ## Assembly system of equations ##
-        for bc in self.bcs:
-            bc.apply(self.u.vector())
+        if isinstance(self.bcs,list):
+            for bc in self.bcs:
+                bc.apply(self.u.vector())
+                bc0 = df.DirichletBC(bc)
+                bc0.homogenize()
+                self.bcs_u.append(bc0)
+        else:
+            self.bcs.apply(self.u.vector())
             bc0 = df.DirichletBC(bc)
             bc0.homogenize()
             self.bcs_u.append(bc0)
@@ -95,7 +120,7 @@ class NonlinearBlockSolver(object):
 
         ## Create nonlinear problem ##
         if not self._init_nlp:
-            self.problem = NLP(self.a, self.L, bcs=self.bcs_u, ident_zeros=self.ident_zeros, ksp=self.linear_solver.ksp())
+            self.problem = NLP(self.a, self.L, self.aP, bcs=self.bcs_u, ident_zeros=self.ident_zeros, ksp=self.linear_solver.ksp())
             self._init_nlp == True
 
         ## Actual solve ##

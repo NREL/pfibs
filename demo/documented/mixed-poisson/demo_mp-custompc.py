@@ -1,5 +1,5 @@
 """Solves a mixed-poisson problem using schur complement approach
-implemented via PETSc commandline options"""
+implemented via PETSc, providing own PC matrix"""
 # -*- coding: utf-8 -*-
 
 ## Future-proofing for Python3+ ##
@@ -10,7 +10,7 @@ from dolfin import *
 from pfibs import *
 
 ## Create mesh ##
-mesh = UnitSquareMesh(40,40)
+mesh = UnitSquareMesh(160,160)
 V = FiniteElement("RT",mesh.ufl_cell(),1)
 P = FiniteElement("DG",mesh.ufl_cell(),0)
 W = FunctionSpace(mesh,V*P)
@@ -38,25 +38,48 @@ class BoundarySource(UserExpression):
     return (2,)
 def boundary(x):
   return x[1] < DOLFIN_EPS or x[1] > 1.0 - DOLFIN_EPS
+class LeftRight(SubDomain):
+    def inside(self, x, on_boundary):
+        return x[0] < DOLFIN_EPS or x[0] > 1.0 - DOLFIN_EPS
 G = BoundarySource(mesh, degree=2)
 bc = DirichletBC(W.sub(0), G, boundary)
 
-## Setup block problem ##
-block_structure = [['u',[0]],['p',[1]]]
-problem = BlockProblem(a,L,w,bcs=bc,block_structure=block_structure)
+boundaries = MeshFunction('size_t',mesh,1,3)
+leftright = LeftRight()
+leftright.mark(boundaries,1)
+ds = Measure("ds",subdomain_data=boundaries)
 
-## PETSc Command-line options ##
-PETScOptions.set('ksp_type','gmres')
-PETScOptions.set('pc_type','fieldsplit')
-PETScOptions.set('pc_fieldsplit_type','schur')
-PETScOptions.set('pc_fieldsplit_schur_fact_type','upper')
-PETScOptions.set('pc_fieldsplit_schur_precondition','selfp')
-PETScOptions.set('fieldsplit_u_ksp_type', 'preonly')
-PETScOptions.set('fieldsplit_u_pc_type', 'bjacobi')
-PETScOptions.set('fieldsplit_p_ksp_type', 'preonly')
-PETScOptions.set('fieldsplit_p_pc_type', 'hypre')
-PETScOptions.set('ksp_monitor_true_residual')
-PETScOptions.set('ksp_converged_reason')
+## Interior Penalty for schur complement matrix ##
+n = FacetNormal(W)
+alpha = Constant(4.0)
+gamma = Constant(8.0)
+h = CellDiameter(mesh)
+h_avg = (h('+') + h('-'))*0.5
+aP = dot(v,u)*dx - dot(grad(q),grad(p))*dx \
+    + dot(avg(grad(q)), jump(p,n))*dS \
+    + dot(jump(q,n), avg(grad(p)))*dS \
+    - alpha/h_avg * dot(jump(q, n), jump(p, n))*dS \
+    + dot(grad(q), p*n)*ds(1) \
+    + dot(q*n, grad(p))*ds(1) \
+    - (gamma/h)*q*p*ds(1)
+
+## Setup block problem ##
+problem = BlockProblem(a,L,w,aP=aP,bcs=bc)
+problem.field('u',0,solver={
+    'ksp_type':'preonly',
+    'pc_type':'bjacobi'
+})
+problem.field('p',1,solver={
+    'ksp_type':'preonly',
+    'pc_type':'hypre'
+})
+problem.split('s1',['u','p'],solver={
+    'ksp_type':'gmres',
+    'pc_fieldsplit_type':'schur',
+    'pc_fieldsplit_schur_fact_type':'upper',
+    'pc_fieldsplit_off_diag_use_amat':True,
+    'ksp_monitor_true_residual':True
+})
 
 ## Setup block solver ##
 solver = LinearBlockSolver(problem)
