@@ -55,13 +55,13 @@ alpha = Constant(4.0)
 gamma = Constant(8.0)
 h = CellDiameter(mesh)
 h_avg = (h('+') + h('-'))*0.5
-aP = dot(v,u)*dx + dot(grad(q),grad(p))*dx \
-    - dot(avg(grad(q)), jump(p,n))*dS \
-    - dot(jump(q,n), avg(grad(p)))*dS \
-    + alpha/h_avg * dot(jump(q, n), jump(p, n))*dS \
-    - dot(grad(q), p*n)*ds(1) \
-    - dot(q*n, grad(p))*ds(1) \
-    + (gamma/h)*q*p*ds(1)
+aP = dot(v,u)*dx - dot(grad(q),grad(p))*dx \
+    + dot(avg(grad(q)), jump(p,n))*dS \
+    + dot(jump(q,n), avg(grad(p)))*dS \
+    - alpha/h_avg * dot(jump(q, n), jump(p, n))*dS \
+    + dot(grad(q), p*n)*ds(1) \
+    + dot(q*n, grad(p))*ds(1) \
+    - (gamma/h)*q*p*ds(1)
 
 ## Setup block problem ##
 problem = BlockProblem(a,L,w,aP=aP,bcs=bc)
@@ -76,7 +76,7 @@ problem.field('p',1,solver={
 problem.split('s1',['u','p'],solver={
     'ksp_type':'gmres',
     'pc_fieldsplit_type':'schur',
-    'pc_fieldsplit_schur_fact_type':'full',
+    'pc_fieldsplit_schur_fact_type':'upper',
     'pc_fieldsplit_off_diag_use_amat':True,
     'ksp_monitor_true_residual':True
 })

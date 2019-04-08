@@ -55,7 +55,7 @@ problem.field('p',1,solver={
 problem.split('s1',['u','p'],solver={
     'ksp_type':'gmres',
     'pc_fieldsplit_type':'schur',
-    'pc_fieldsplit_schur_fact_type':'full',
+    'pc_fieldsplit_schur_fact_type':'upper',
     'pc_fieldsplit_schur_precondition':'selfp',
     'ksp_monitor_true_residual':True
 })
