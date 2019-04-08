@@ -213,8 +213,8 @@ class PCDPC(PythonPC):
         df.assemble(self.aP, tensor=self.A_p)
         
         ## Optionally apply BCs ##
-        if 'bcs_aP' in self.ctx:
-            self.applyBCs(self.A_p,self.ctx['bcs_aP'])
+        #if 'bcs_aP' in self.ctx:
+        #    self.applyBCs(self.A_p,self.ctx['bcs_aP'])
         self.A_submat = self.A_p.mat().createSubMatrix(self.isset,self.isset,self.A_submat)
     
     def apply(self, pc, x, y):

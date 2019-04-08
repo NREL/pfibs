@@ -66,8 +66,7 @@ J = derivative(F,X)
 bc_pcd1 = DirichletBC(W.sub(1), Constant(0.0), boundaries, 1 )
 
 ## Setup block problem ##
-block_structure = [['u',[[0,0],[0,1]]],['p',1]]
-problem = BlockProblem(J, F, X, bcs=bcs, block_structure=block_structure)
+problem = BlockProblem(J, F, X, bcs=bcs)
 
 ## Built-in function calls ##
 problem.field('u',[[0,0],[0,1]],solver={
@@ -75,7 +74,7 @@ problem.field('u',[[0,0],[0,1]],solver={
     'pc_type':'hypre',
 })
 problem.field('p',1,solver={
-    'ksp_type':'gmres',
+    'ksp_type':'preonly',
     'pc_type':'python',
     'pc_python_type':'pfibs.PCDPC',
 })
@@ -89,6 +88,7 @@ problem.split('s1',['u','p'],solver={
 ## PCDPC context ##
 ctx = {
     'nu': 1.0,
+#    'update': True,
     'vp_spaces': [0,1],
     'bcs_aP': bc_pcd1,
     'solver': {},
