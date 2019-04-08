@@ -2,12 +2,13 @@
 from __future__ import print_function
 
 ## Import dolfin and numpy and time ##
-from dolfin import PETScMatrix, PETScOptions, PETScVector, assemble, Timer
+import dolfin as df
 from numpy import array, where, zeros
 from petsc4py import PETSc
 from mpi4py import MPI
 import copy
 
+## Base class for Python PC ##
 class PythonPC(object):
     def __init__(self):
 
@@ -32,234 +33,193 @@ class PythonPC(object):
             self.vbp = self.ctx['problem']
             self.dofs,_ = self.vbp.extract_dofs(self.ctx['field_name'])
             self.isset = PETSc.IS().createGeneral(list(self.dofs))
-            
 
             ## Determine whether to update the pc or not
             if 'update' in self.ctx:
                 self.update_pc = self.ctx['update']
             else:
                 self.update_pc = False
-			
+		    
+            ## Extract options prefix ##
+            self.options_prefix = self.ctx['options_prefix'] + 'PythonPC_'
 
+            ## Process PETScOptions ##
+            if 'solver' in self.ctx:
+                if not isinstance(self.ctx['solver'],dict):
+                    raise TypeError('solver must be of type dict')
+                self.setPetscOptions(self.options_prefix,self.ctx['solver'])
+            
             ## Create KSP object
             self.initialize(pc)
             self.initialized = True
     
+    ## Set PETSc options, do not override ##
+    def setPetscOptions(self,prefix,options):
+        for key in options:
+            if type(options[key]) is bool:
+                if options[key] is True:
+                    df.PETScOptions.set(prefix+key)
+            elif options[key] is not None:
+                df.PETScOptions.set(prefix+key,options[key])
+
+    ## Extract BC dofs, do not override ##
+    def extractBCs(self,bcs):
+        if isinstance(bcs,list):
+            bc_dofs = []
+            bc_value = []
+            for bc in bcs:
+                sub_bc_dofs, sub_bc_value = self.extractBCs(bc)
+                bc_dofs.extend(sub_bc_dofs)
+                bc_value.extend(sub_bc_value)
+        else:
+            # Initialize matrices ##
+            bc_dofs = list(bcs.get_boundary_values().keys())
+            bc_value = list(bcs.get_boundary_values().values())
+            block_dofs = PETSc.IS().createGeneral(bcs.function_space().dofmap().dofs())
+            loc2globe = bcs.function_space().dofmap().local_to_global_index
+            
+            ## Find the indexes of the local boundary dofs ##
+            for i in range(len(bc_dofs)):
+                dof = bc_dofs[i]
+                dof = loc2globe(dof)
+                val = where(array(block_dofs) == dof)[0]
+                if len(val) == 0:
+                    bc_dofs[i] = False
+                else:
+                    bc_dofs[i] = val[0]
+        return bc_dofs, bc_value
+
+    ## Apply BCS to a Matrix, do not override ##
+    def applyBCs(self,A,bcs):
+        if isinstance(bcs,list):
+            for bc in bcs:
+                bc.apply(A)
+        else:
+            bcs.apply(A)
+        return A
+
     ## Can override ##
     def initialize(self, pc):
         
         ## Assemble aP ##
-        self.P_mat = PETScMatrix()
+        self.P_mat = df.PETScMatrix()
         if 'aP' not in self.ctx:
             raise ValueError("Must provide aP form to ctx")
         else:
             self.aP = self.ctx['aP']
-            assemble(self.aP, tensor=self.P_mat)
+            df.assemble(self.aP, tensor=self.P_mat)
 
         ## Optionally apply BCs ##
         if 'bcs_aP' in self.ctx:
-            bcs_aP = self.ctx['bcs_aP']
-            if isinstance(bcs_aP,list):
-                for bc in bcs_aP:
-                    bc.apply(self.P_mat)
-            else:
-                bcs_aP.apply(self.P_mat)
+            self.applyBCs(self.P_mat,self.ctx['bcs_aP'])
         
         ## Extract submatrix ##
         self.P_submat = self.P_mat.mat().createSubMatrix(self.isset,self.isset)
         
-        ## Extract options prefix ##
-        self.options_prefix = self.ctx['options_prefix'] + 'pypc_'
-
         ## Create KSP solver ##
         self.ksp = PETSc.KSP().create(comm=pc.comm)
         self.ksp.setType(PETSc.KSP.Type.PREONLY)
         self.ksp.incrementTabLevel(1, parent=pc)
         self.ksp.setOperators(self.P_submat)
         self.ksp.setOptionsPrefix(self.options_prefix)
-		
-		## Process PETScOptions ##
-        if 'pypc_solver' in self.ctx:
-            for key in self.ctx['pypc_solver']:
-                if type(self.ctx['pypc_solver'][key]) is bool:
-                    if self.ctx['pypc_solver'][key] is True:
-                        PETScOptions.set(self.options_prefix+key)
-                elif self.ctx['pypc_solver'][key] is not None:
-                    PETScOptions.set(self.options_prefix+key,self.ctx['pypc_solver'][key])
-
         self.ksp.setFromOptions()
         self.ksp.setUp()
    
     ## Can override ##
     def update(self, pc):
-        assemble(self.aP, tensor=self.P_mat)
+        df.assemble(self.aP, tensor=self.P_mat)
         
         ## Optionally apply BCs ##
         if 'bcs_aP' in self.ctx:
-            bcs_aP = self.ctx['bcs_aP']
-            if isinstance(bcs_aP,list):
-                for bc in bcs_aP:
-                    bc.apply(self.P_mat)
-            else:
-                bcs_aP.apply(self.P_mat)
+            self.applyBCs(self.P_mat,self.ctx['bcs_aP'])
 
-        ## Extract submatrix ##
+        ## Update submatrix ##
         self.P_submat = self.P_mat.mat().createSubMatrix(self.isset,self.isset,self.P_submat)
         
     ## Can override ##
     def apply(self, pc, x, y):
         self.ksp.solve(x,y)
 
-class PCD_BRM1(object):
-    #def __init__(self):
-        ## This preconditioner will preform:        ##
-        ##                                          ##
-        ##    y = -M_p^{-1} (I + K_p A_p^{-1}) x    ##
+class PCDPC(PythonPC):
+    def __init__(self):
+        super(PCDPC,self).__init__()
 
-    #    self.initialized = False
-    #    super(PCD_BRM1, self).__init__()
-
-    ## User is required to implement the following ##
-    def build(self):
-        pass
-
-    ## PETSc method, either initialize or update the PC ##
-    def setUp(self, pc):
-        #self.build(pc)
-        print("HE1")
-        ctx = self.pc.getKSP().getDM().getAppCtx()
-        print(ctx)
-        self.initialize(pc)
-        #print(self.hi)
-        #exit()
-        #if self.initialized:
-        #    self.update(pc)
-        #else:
-        #    self.build(pc)
-        #    self.initialize(pc)
-        #    self.intialized = True
-    ## 
     def initialize(self, pc):
-        timer = Timer("pFibs: Initialize Preconditioner")
-        if pc.getType() != "python":
-            raise ValueError("Expecting PC type python")
-        print(self.test)
-        exit()
-        A,P = pc.getOperators()
-        print(A.getType())
-        print("HEY1")
-        ctx = pc.getKSP().content
-        #ctx = P.getPythonContext()
-        print("HEY2")
-        #ctx = pc.getPythonContext()
-        print(ctx.ctx)
-        ## Setup bcs and submatrices ##
-        print("HEY3")
-        self.bc = ctx["bc"]
+        if 'vp_spaces' not in self.ctx:
+            raise ValueError("Must provide vp_spaces (velocity and pressure subspaces) to ctx")
+        else:    
+            self.vp_spaces = self.ctx['vp_spaces']
+            if not isinstance(self.vp_spaces,list):
+                raise TypeError('vp_spaces must be of type list()')
+        if 'nu' not in self.ctx:
+            raise ValueError('Must provide nu (viscosity) to ctx')
+        else:
+            self.nu = self.ctx['nu']
+        self.V = self.vbp.V
+        p = df.TrialFunction(self.V)
+        q = df.TestFunction(self.V)
+        p = df.split(p)[self.vp_spaces[1]]
+        q = df.split(q)[self.vp_spaces[1]]
+        u = df.split(self.vbp.u)[self.vp_spaces[0]]
+
+        ## Mass term ##
+        self.mP = df.Constant(1.0/self.nu)*p*q*df.dx
         
-        self.bc_dofs = list(self.bc.get_boundary_values().keys())
-        self.bc_value = list(self.bc.get_boundary_values().values())
-        self.block_dofs = PETSc.IS().createGeneral(self.bc.function_space().dofmap().dofs())
-        loc2globe = self.bc.function_space().dofmap().local_to_global_index
+        ## Advection term ##
+        self.aP = df.Constant(1.0/self.nu)*df.dot(df.grad(p), u)*q*df.dx
+
+        ## Stiffness term ##
+        self.kP = df.inner(df.grad(p), df.grad(q))*df.dx
+
+        ## Create PETSc Matrices ##
+        self.M_p = df.PETScMatrix()
+        self.A_p = df.PETScMatrix()
+        self.K_p = df.PETScMatrix()
+        df.assemble(self.mP, tensor=self.M_p)
+        df.assemble(self.aP, tensor=self.A_p)
+        df.assemble(self.kP, tensor=self.K_p)
         
-        ## Find the indexes of the local boundary dofs ##
-        for i in range(len(self.bc_dofs)):
-            dof = self.bc_dofs[i]
-            dof = loc2globe(dof)
-            val = where(array(self.block_dofs) == dof)[0]
-            if len(val) == 0:
-                self.bc_dofs[i] = False
-            else:
-                self.bc_dofs[i] = val[0]
-        timer2.stop()
+        ## Optionally apply BCs ##
+        if 'bcs_aP' in self.ctx:
+            #self.A_p = self.applyBCs(self.A_p,self.ctx['bcs_aP'])
+            self.bc_dofs, self.bc_value = self.extractBCs(self.ctx['bcs_aP'])
         
-        ## Extract PCD operators ##
-        self.M_p = ctx["M_p"]
-        self.K_p = ctx["K_p"]
-        self.A_p = ctx["A_p"]
-        M_p_mat = PETScMatrix()
-        K_p_mat = PETScMatrix()
-        A_p_mat = PETScMatrix()
-        assemble(self.M_p, tensor=M_p_mat)
-        assemble(self.K_p, tensor=K_p_mat)
-        assemble(self.A_p, tensor=A_p_mat)
-        self.bc.apply(A_p_mat)
+        ## Extract sub matrices ##
+        self.M_submat = self.M_p.mat().createSubMatrix(self.isset,self.isset)
+        self.A_submat = self.A_p.mat().createSubMatrix(self.isset,self.isset)
+        self.K_submat = self.K_p.mat().createSubMatrix(self.isset,self.isset)
+
+        ## KSP solver for mass matrix ##
+        self.M_ksp = PETSc.KSP().create(comm=pc.comm)
+        self.M_ksp.setType(PETSc.KSP.Type.PREONLY)        # Default solver, can change 
+        self.M_ksp.pc.setType(PETSc.PC.Type.LU)    # Default solver, can change
+        self.M_ksp.incrementTabLevel(1, parent=pc)
+        self.M_ksp.setOperators(self.M_submat)
+        self.M_ksp.setOptionsPrefix(self.options_prefix+'mP_')
+        self.M_ksp.setFromOptions()
+        self.M_ksp.setUp()
+
+        ## KSP solver for stiffness matrix ##
+        self.K_ksp = PETSc.KSP().create(comm=pc.comm)
+        self.K_ksp.setType(PETSc.KSP.Type.PREONLY)        # Default solver, can change 
+        self.K_ksp.pc.setType(PETSc.PC.Type.LU)      # Default solver, can change
+        self.K_ksp.incrementTabLevel(1, parent=pc)
+        self.K_ksp.setOperators(self.K_submat)
+        self.K_ksp.setOptionsPrefix(self.options_prefix+'aP_')
+        self.K_ksp.setFromOptions()
+        self.K_ksp.setUp()
+
+    def update(self,pc):
+        df.assemble(self.aP, tensor=self.A_p)
         
-        ## Extract submatrices to use ##
-        M_p_mat = M_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
-        self.K_p_matat = K_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
-        A_p_mat = A_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
-        
-        ## Build the solver for the M_p operator ##
-        self.M_p_ksp = PETSc.KSP().create()
-        self.M_p_ksp.setType(PETSc.KSP.Type.PREONLY)
-        self.M_p_ksp.pc.setType(PETSc.PC.Type.HYPRE)
-        self.M_p_ksp.setOperators(M_p_mat)
-
-        ## Build the solver for the A_p operator ##
-        self.A_p_ksp = PETSc.KSP().create()
-        self.A_p_ksp.setType(PETSc.KSP.Type.PREONLY)
-        self.A_p_ksp.pc.setType(PETSc.PC.Type.HYPRE)
-        self.A_p_ksp.setOperators(A_p_mat)
-        
-        timer.stop()  
-
-    def update(self, pc):
-        ssemble(self.M_p, tensor=M_p_mat)
-        assemble(self.K_p, tensor=K_p_mat)
-        assemble(self.A_p, tensor=A_p_mat)
-        self.bc.apply(A_p_mat)
-
-    def build(self,pc):
-        ## Start the timer ##
-        timer = Timer("pFibs: Build Preconditioner")
-
-        ## Store the DOFS related to the block this preconditioner acts on. ##
-        self.block_dofs = is_block
-        loc2globe = self.bc.function_space().dofmap().local_to_global_index
-
-        timer2 = Timer("pFibs: Find Block Boundary DOFS")
-        ## Find the indexes of the local boundary dofs ##
-        for i in range(len(self.bc_dofs)):
-            dof = self.bc_dofs[i]
-            dof = loc2globe(dof)
-            val = where(array(self.block_dofs) == dof)[0]
-            if len(val) == 0:
-                self.bc_dofs[i] = False
-            else:
-                self.bc_dofs[i] = val[0]
-        timer2.stop()
-
-        ## Assemble Preconditioner, apply bcs, and extract the relevant submatrices. ##
-        M_p_mat = PETScMatrix()
-        K_p_mat = PETScMatrix()
-        A_p_mat = PETScMatrix()
-        assemble(self.M_p, tensor=M_p_mat)
-        assemble(self.K_p, tensor=K_p_mat)
-        assemble(self.A_p, tensor=A_p_mat)
-        self.bc.apply(A_p_mat)
-        M_p_mat = M_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
-        self.K_p_matat = K_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
-        A_p_mat = A_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
-
-        ## Build the solver for the M_p operator ##
-        self.M_p_ksp = PETSc.KSP().create()
-        self.M_p_ksp.setType(PETSc.KSP.Type.PREONLY)
-        self.M_p_ksp.pc.setType(PETSc.PC.Type.HYPRE)
-        self.M_p_ksp.setOperators(M_p_mat)
-
-        ## Build the solver for the M_p operator ##
-        self.A_p_ksp = PETSc.KSP().create()
-        self.A_p_ksp.setType(PETSc.KSP.Type.PREONLY)
-        self.A_p_ksp.pc.setType(PETSc.PC.Type.HYPRE)
-        self.A_p_ksp.setOperators(A_p_mat)
-
-        ## Stop the timer ##
-        timer.stop()
-
+        ## Optionally apply BCs ##
+        if 'bcs_aP' in self.ctx:
+            self.applyBCs(self.A_p,self.ctx['bcs_aP'])
+        self.A_submat = self.A_p.mat().createSubMatrix(self.isset,self.isset,self.A_submat)
+    
     def apply(self, pc, x, y):
         ## Start the timer ##
-        timer = Timer("pFibs: Apply Preconditioner")
+        timer = df.Timer("pFibs PythonPC: Apply Preconditioner")
 
         ## I'm not sure what this does but the fenapack guys do it so... ##
         z = x.duplicate()
@@ -268,75 +228,182 @@ class PCD_BRM1(object):
         x.copy(result=z)
 
         ## Apply the boundary conditions to the RHS ##
-        # self.bc.apply(z)
         z[self.bc_dofs] = self.bc_value
 
-        ## Perform: y = A_p^{-1} z ##
-        self.A_p_ksp.solve(z, y) # 
+        ## Perform: y = K_submat^{-1} z ##
+        self.K_ksp.solve(z, y) # 
 
-        ## Apply K_p: z = K_p y
-        self.K_p_matat.mult(y, z)
+        ## Apply A_submat: z = A_submat y
+        self.A_submat.mult(y, z)
 
         ## Add in x: z = z + x ##
         z.axpy(1.0, x)
 
-        ## Perform: y = M_p^{-1} z ##
-        self.M_p_ksp.solve(z, y)
+        ## Perform: y = M_submat^{-1} z ##
+        self.M_ksp.solve(z, y)
         
         ## Negate ##
         y.scale(-1.0) 
 
         ## Stop the timer ##
         timer.stop()
+        
 
-class MyPCD(PCD_BRM1):
-    def initialize(self,pc):
-        print("HI FROM MYPCD")
-
-
-
-
-class Pre_Laplace():
-    def __init__(self,A_p):
-        ## This preconditioner will preform:        ##
-        ##                                          ##
-        ##    y = -M_p^{-1} (I + K_p A_p^{-1}) x    ##
-
-        ## Store the need operators ##
-        self.A_p = A_p
-
-    def build(self,is_block):
-        ## Start the timer ##
-        timer = Timer("pFibs: Build Preconditioner")
-
-        ## Store the DOFS related to the block this preconditioner acts on. ##
-        self.block_dofs = is_block
-
-        ## Assemble Preconditioner, apply bcs, and extract the relevant submatrices. ##
-        A_p_mat = PETScMatrix()
-        assemble(self.A_p, tensor=A_p_mat)
-        A_p_mat.ident_zeros()
-        A_p_mat = A_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
-
-        ## Build the solver for the M_p operator ##
-        self.A_p_ksp = PETSc.KSP().create()
-        self.A_p_ksp.setType(PETSc.KSP.Type.PREONLY)
-        self.A_p_ksp.pc.setType(PETSc.PC.Type.HYPRE)
-        self.A_p_ksp.setOperators(A_p_mat)
-
-        ## Stop the timer ##
-        timer.stop()
-
-    def apply(self, pc, x, y):
-        ## Start the timer ##
-        timer = Timer("pFibs: Apply Preconditioner")
-
-        ## Perform: y = A_p^{-1} x ##
-        self.A_p_ksp.solve(x, y) # 
-
-        ## Stop the timer ##
-        timer.stop()
-
+#class PCD_BRM1(PythonPC):
+#    def __init__(self):
+#        ## This preconditioner will preform:        ##
+#        ##                                          ##
+#        ##    y = -M_p^{-1} (I + K_p A_p^{-1}) x    ##
+#
+#        super(PCD_BRM1,self).__init__()
+#
+#    ## 
+#    def initialize(self, pc):
+#        timer = Timer("pFibs PythonPC: Initialize preconditioner")
+#        self.V = self.ctx['V']
+#        
+#          
+#        self.M_mat = PETScMatrix()
+#        self.K_mat = PETScMatrix()
+#        self.A_mat = PETScMatrix()
+#        
+#        if 'aP' not in self.ctx:
+#            raise ValueError("Must provide aP form to ctx")
+#        else:
+#            self.aP = self.ctx['aP']
+#            assemble(self.aP, tensor=self.P_mat)
+#
+#        
+#        assemble(self.ctx['M'], tensor=M_p_mat)
+#        assemble(self.ctx['K'], tensor=K_p_mat)
+#        assemble(self.A_p, tensor=A_p_mat)
+#        self.bc.apply(A_p_mat)
+#        
+#        ## Initialize matrices ##
+#        #self.bc_dofs = list(self.bc.get_boundary_values().keys())
+#        #self.bc_value = list(self.bc.get_boundary_values().values())
+#        #self.block_dofs = PETSc.IS().createGeneral(self.bc.function_space().dofmap().dofs())
+#        #loc2globe = self.bc.function_space().dofmap().local_to_global_index
+#        #
+#        ### Find the indexes of the local boundary dofs ##
+#        #for i in range(len(self.bc_dofs)):
+#        #    dof = self.bc_dofs[i]
+#        #    dof = loc2globe(dof)
+#        #    val = where(array(self.block_dofs) == dof)[0]
+#        #    if len(val) == 0:
+#        #        self.bc_dofs[i] = False
+#        #    else:
+#        #        self.bc_dofs[i] = val[0]
+#        #timer2.stop()
+#        
+#        ## Extract PCD operators ##
+#        self.M_p = ctx["M_p"]
+#        self.K_p = ctx["K_p"]
+#        self.A_p = ctx["A_p"]
+#        
+#        ## Extract submatrices to use ##
+#        M_p_mat = M_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
+#        self.K_p_matat = K_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
+#        A_p_mat = A_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
+#        
+#        ## Build the solver for the M_p operator ##
+#        self.M_p_ksp = PETSc.KSP().create()
+#        self.M_p_ksp.setType(PETSc.KSP.Type.PREONLY)
+#        self.M_p_ksp.pc.setType(PETSc.PC.Type.HYPRE)
+#        self.M_p_ksp.setOperators(M_p_mat)
+#
+#        ## Build the solver for the A_p operator ##
+#        self.A_p_ksp = PETSc.KSP().create()
+#        self.A_p_ksp.setType(PETSc.KSP.Type.PREONLY)
+#        self.A_p_ksp.pc.setType(PETSc.PC.Type.HYPRE)
+#        self.A_p_ksp.setOperators(A_p_mat)
+#        
+#        timer.stop()  
+#
+#    def update(self, pc):
+#        ssemble(self.M_p, tensor=M_p_mat)
+#        assemble(self.K_p, tensor=K_p_mat)
+#        assemble(self.A_p, tensor=A_p_mat)
+#        self.bc.apply(A_p_mat)
+#
+#    def build(self,pc):
+#        ## Start the timer ##
+#        timer = Timer("pFibs: Build Preconditioner")
+#
+#        ## Store the DOFS related to the block this preconditioner acts on. ##
+#        self.block_dofs = is_block
+#        loc2globe = self.bc.function_space().dofmap().local_to_global_index
+#
+#        timer2 = Timer("pFibs: Find Block Boundary DOFS")
+#        ## Find the indexes of the local boundary dofs ##
+#        for i in range(len(self.bc_dofs)):
+#            dof = self.bc_dofs[i]
+#            dof = loc2globe(dof)
+#            val = where(array(self.block_dofs) == dof)[0]
+#            if len(val) == 0:
+#                self.bc_dofs[i] = False
+#            else:
+#                self.bc_dofs[i] = val[0]
+#        timer2.stop()
+#
+#        ## Assemble Preconditioner, apply bcs, and extract the relevant submatrices. ##
+#        M_p_mat = PETScMatrix()
+#        K_p_mat = PETScMatrix()
+#        A_p_mat = PETScMatrix()
+#        assemble(self.M_p, tensor=M_p_mat)
+#        assemble(self.K_p, tensor=K_p_mat)
+#        assemble(self.A_p, tensor=A_p_mat)
+#        self.bc.apply(A_p_mat)
+#        M_p_mat = M_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
+#        self.K_p_matat = K_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
+#        A_p_mat = A_p_mat.mat().createSubMatrix(self.block_dofs,self.block_dofs)
+#
+#        ## Build the solver for the M_p operator ##
+#        self.M_p_ksp = PETSc.KSP().create()
+#        self.M_p_ksp.setType(PETSc.KSP.Type.PREONLY)
+#        self.M_p_ksp.pc.setType(PETSc.PC.Type.HYPRE)
+#        self.M_p_ksp.setOperators(M_p_mat)
+#
+#        ## Build the solver for the M_p operator ##
+#        self.A_p_ksp = PETSc.KSP().create()
+#        self.A_p_ksp.setType(PETSc.KSP.Type.PREONLY)
+#        self.A_p_ksp.pc.setType(PETSc.PC.Type.HYPRE)
+#        self.A_p_ksp.setOperators(A_p_mat)
+#
+#        ## Stop the timer ##
+#        timer.stop()
+#
+#    def apply(self, pc, x, y):
+#        ## Start the timer ##
+#        timer = Timer("pFibs: Apply Preconditioner")
+#
+#        ## I'm not sure what this does but the fenapack guys do it so... ##
+#        z = x.duplicate()
+#
+#        ## Make a copy of so we can use x later ##
+#        x.copy(result=z)
+#
+#        ## Apply the boundary conditions to the RHS ##
+#        # self.bc.apply(z)
+#        z[self.bc_dofs] = self.bc_value
+#
+#        ## Perform: y = A_p^{-1} z ##
+#        self.A_p_ksp.solve(z, y) # 
+#
+#        ## Apply K_p: z = K_p y
+#        self.K_p_matat.mult(y, z)
+#
+#        ## Add in x: z = z + x ##
+#        z.axpy(1.0, x)
+#
+#        ## Perform: y = M_p^{-1} z ##
+#        self.M_p_ksp.solve(z, y)
+#        
+#        ## Negate ##
+#        y.scale(-1.0) 
+#
+#        ## Stop the timer ##
+#        timer.stop()
 
 class UvahLiuWu():
     def __init__(self,H_p,K_p,rho_p):
@@ -452,45 +519,6 @@ class Elman():
 
         ## Perform: y = BBT^1 x ##
         self.BBT_p_ksp.solve(x, y)
-
-        ## Stop the timer ##
-        timer.stop()
-
-
-
-
-class CustomPreTemplate():
-    def __init__(self,SomeMatrix):
-        ## Use this to store the relevant matrices ##
-        self.SomeMatrix = SomeMatrix
-
-    def build(self):
-        ## Use this to assemble matrices and build individual ksp solvers ##
-
-        ## Start the timer ##
-        timer = Timer("pFibs: Build Preconditioner")
-
-        ## Assemble Preconditioner ##
-        SomeMatrix_mat = PETScMatrix()
-        assemble(self.SomeMatrix, tensor=SomeMatrix_mat)
-
-        ## Build the solver for the M_p operator ##
-        self.SomeMatrix_ksp = PETSc.KSP().create()
-        self.SomeMatrix_ksp.setType(PETSc.KSP.Type.PREONLY)
-        self.SomeMatrix_ksp.pc.setType(PETSc.PC.Type.LU)
-        self.SomeMatrix_ksp.setOperators(SomeMatrix_mat.mat())
-
-        ## Stop the timer ##
-        timer.stop()
-
-    def apply(self, pc, x, y):
-        ## Use this to apply the preconditioner ##
-
-        ## Start the timer ##
-        timer = Timer("pFibs: Apply Preconditioner")
-
-        ## Perform: y = (SomeMatrix)^(-1) x ##
-        self.SomeMatrix_ksp.solve(x, y)
 
         ## Stop the timer ##
         timer.stop()
