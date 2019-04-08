@@ -3,3 +3,4 @@
 */output/*
 experimental/*
 *.egg-info
+.pytest_cache
