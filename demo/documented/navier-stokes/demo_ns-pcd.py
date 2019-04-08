@@ -90,7 +90,7 @@ ctx = {
     'nu': 1.0,
     'update': True,
     'vp_spaces': [0,1],
-    'bcs_aP': bc_pcd1,
+    'bcs_kP': bc_pcd1,
     'solver': {},
 }
 

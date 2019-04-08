@@ -183,9 +183,9 @@ class PCDPC(PythonPC):
         df.assemble(self.kP, tensor=self.K_p)
         
         ## Optionally apply BCs ##
-        if 'bcs_aP' in self.ctx:
-            self.applyBCs(self.K_p,self.ctx['bcs_aP'])
-            self.bc_dofs, self.bc_value = self.extractBCs(self.ctx['bcs_aP'])
+        if 'bcs_kP' in self.ctx:
+            self.applyBCs(self.K_p,self.ctx['bcs_kP'])
+            self.bc_dofs, self.bc_value = self.extractBCs(self.ctx['bcs_kP'])
         
         ## Extract sub matrices ##
         self.M_submat = self.M_p.mat().createSubMatrix(self.isset,self.isset)
@@ -216,10 +216,6 @@ class PCDPC(PythonPC):
     def update(self,pc):
         
         df.assemble(self.aP, tensor=self.A_p)
-        
-        ## Optionally apply BCs ##
-        if 'bcs_aP' in self.ctx:
-            self.applyBCs(self.K_p,self.ctx['bcs_aP'])
         self.A_submat = self.A_p.mat().createSubMatrix(self.isset,self.isset,self.A_submat)
     
     ## Apply PCD preconditioner to pressure schur complement ##

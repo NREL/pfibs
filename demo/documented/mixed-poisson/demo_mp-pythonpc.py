@@ -61,7 +61,7 @@ aP = -dot(grad(q),grad(p))*dx \
     - alpha/h_avg * dot(jump(q, n), jump(p, n))*dS \
     + dot(grad(q), p*n)*ds(1) \
     + dot(q*n, grad(p))*ds(1) \
-    - (gamma/h)*q*p*ds(1))
+    - (gamma/h)*q*p*ds(1)
 
 ## Setup block problem ##
 problem = BlockProblem(a,L,w,bcs=bc)
