@@ -88,7 +88,7 @@ problem.split('s1',['u','p'],solver={
 ## PCDPC context ##
 ctx = {
     'nu': 1.0,
-#    'update': True,
+    'update': True,
     'vp_spaces': [0,1],
     'bcs_aP': bc_pcd1,
     'solver': {},
