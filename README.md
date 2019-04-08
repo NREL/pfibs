@@ -150,4 +150,58 @@ To solve the system can be solved using:
 solver.solve()
 ```
 
+### Note about PETScOptions()
+
+pFibs is designed so that all PETSc commandline options should be passed in via 'solver' dicts. Although FEniCS/DOLFIN has the PETScOptions() functionality, we strongly recommend not using it directly as this may interfere with the pFibs backend. 
+
+## Custom Python preconditioning
+
+One salient feature of pFibs is its ability to build custom Python based preconditioning algorithms. The class 'PythonPC' is pFib's base class for providing a custom preconditioner for an individual field. To use this, the 'solver' for the particular field must have the following solver options:
+```
+solver = {
+    'pc_type': 'python',
+    'pc_python_type': 'pfibs.PythonPC'
+}
+```
+And the 'ctx' dict should have the following:
+```
+ctx = {
+    'aP': aP,
+    'bcs_aP': bcs_aP, # Optional
+    'solver': pythonpc_solver # Optional
+}
+```
+where 'aP' is the (required) bilinear form of the preconditioner provided by the user, 'bcs_aP' is the optional DirichletBC, and 'pythonpc_solver' is a dict containing PETSc commandline options for the solver inside.
+
+'PythonPC' also serves as a template for building more sophisticated preconditioning algorithms. Users can create their own PythonPC's by inheriting  the 'PythonPC' class and overloading key member functions like 'initialize()', 'update()', and 'apply()'. Parameters need to construct this custom preconditioner can be passed in through the application context 'ctx' dict.
+
+#### Pressure-Convection-Diffusion (PCD) solver
+
+The 'PCDPC' class is one example of how users can inheriting from the 'PythonPC' class and creating a more sophisticated preconditioner. To use this package, the pressure field must have this solver:
+```
+solver = {
+    'pc_type': 'python',
+    'pc_python_type': 'pfibs.PCDPC'
+}
+```
+And the 'ctx' dict should have the following:
+```
+ctx = {
+    'nu': nu,
+    'vp_spaces': vp_spaces,
+    'bcs_kP': bcs_kP, # Optional
+    'solver': pcd_solver # Optional
+}
+```
+where 'nu' is the viscosity, 'vp_spaces' is a list containing the sub FunctionSpace indices for the velocity and pressure, 'bcs_kP' is the optional DirichletBC needed for the stiffness matrix, and 'pcd_solver' is a dict containing PETSc commandline options for the mass and stiffness matrix solvers inside. If the user wants to customize the mass and stiffness matrix solvers, 'pcd_solver' should look something like:
+```
+pcd_solver = {
+    ## parameters for the mass matrix ##
+    'mP_ksp_type': 'gmres',
+    'mP_pc_type': 'bjacobi',
+    ## parameters for the stiffness matrix ##
+    'kP_ksp_type': 'gmres',
+    'kP_pc_type': 'hypre',
+}
+```
 See demos for further details.
