@@ -14,7 +14,7 @@ from petsc4py import PETSc
 import numpy as np
 
 ## Create mesh ##
-mesh = UnitSquareMesh(200,200)
+mesh = UnitSquareMesh(40,40)
 V = FiniteElement("RT",mesh.ufl_cell(),1)
 P = FiniteElement("DG",mesh.ufl_cell(),0)
 W = MixedElement([V,P,V,P])
@@ -76,28 +76,18 @@ params2 = {
     "ksp_type":"preonly",
     "pc_type":"hypre",
 }
-additive = {
-    "ksp_type":"gmres",
-    "pc_fieldsplit_type":"additive",
-    "ksp_monitor_true_residual": True
-}
 schur = {
-    "ksp_type":"preonly",
+    "ksp_type":"gmres",
     "pc_fieldsplit_type":"schur",
     "pc_fieldsplit_schur_fact_type":"full",
-    "pc_fieldsplit_schur_precondition":"selfp"
+    "pc_fieldsplit_schur_precondition":"selfp",
+    "ksp_monitor_true_residual": True
 }
 problem = BlockProblem(a,L,w,bcs=[])
-problem.field('0',0,solver=params1)
-problem.field('1',1,solver=params2)
-problem.field('2',2,solver=params1)
-problem.field('3',3,solver=params2)
-problem.split('s1',['0','1'],solver=schur)
-problem.split('s2',['2','3'],solver=schur)
-problem.split('s3',['s1','s2'],solver=additive)
+problem.field('v',[0,2],solver=params1)
+problem.field('p',[1,3],solver=params2)
+problem.split('s1',['v','p'],solver=schur)
 
 ## Setup block solver ##
 solver = LinearBlockSolver(problem)
 solver.solve()
-
-list_timings(TimingClear.keep, [TimingType.wall])

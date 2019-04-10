@@ -113,7 +113,7 @@ The above setup enables the user to customize individual solvers for each of the
 
 #### Configuring the PETSc fieldsplit solver
 
-The 'pc_type' of each split is set to `fieldsplit`, and the user should not override this. Instead, the user can customize the field split type. For example, the following options set the Schur complement approach with upper factorization:
+The `pc_type` of each split is set to `fieldsplit` and should not be changed. Instead, the user can customize the field split type. For example, the following options set the Schur complement approach with upper factorization:
 ```
 solver = {
     'ksp_type': 'gmres',
@@ -122,6 +122,8 @@ solver = {
     'pc_fieldsplit_schur_precondition': 'selfp', # choice of a11 (default), selfp, user
 }
 ```
+
+The default KSP and PC types for field split are `gmres` and `multiplicative` respectively.
 
 ### Step 4 - Create a block solver:
 
