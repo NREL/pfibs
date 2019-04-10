@@ -30,6 +30,8 @@ class BlockProblem(object):
         self.adjoint = kwargs.get("adjoint",False)
         self.ident_zeros = kwargs.get("ident_zeros",False)
         
+        self.log_level = kwargs.get("log_level",0)
+        
         ## Extract the Function Space ##
         self.V  = self.u.function_space()
         self.dofs = np.array(self.u.function_space().dofmap().dofs())
@@ -50,6 +52,9 @@ class BlockProblem(object):
     ## Add a field to the block problem ##
     def field(self, *args, **kwargs):
         
+        if self.log_level >= 1:
+            timer = df.Timer("pFibs: Add block problem field")
+
         ## Check if splits already defined ##
         if self.finalize_field:
             raise RuntimeError("Cannot add anymore fields after split has been called")
@@ -70,10 +75,16 @@ class BlockProblem(object):
         ## Add to dictionary ##
         self.block_field.update({field_name:[self.num_fields,field_indx,solver_params]})
         self.num_fields += 1
+        
+        if self.log_level >= 1:
+            timer.stop()
  
     ## Extract dofs ##
     def extract_dofs(self,key):
         
+        if self.log_level >= 3:
+            timer = df.Timer("pFibs: Setup fields - Iterate through block fields - Extract dofs")
+
         ## If multiple subspaces belong to this field ##
         if isinstance(self.block_field[key][1],list):
             dofs = np.array([])
@@ -97,11 +108,18 @@ class BlockProblem(object):
         
         ## Get size of array ##
         ndof = dofs.size
+
+        if self.log_level >= 3:
+            timer.stop()
+
         return (dofs, ndof)
 
     ## Set up the fields ##
     def setup_fields(self):
         
+        if self.log_level >= 1:
+            timer = df.Timer("pFibs: Setup fields")
+
         ## Default if empty ##
         if not self.block_field:
             for i in range(self.V.num_sub_spaces()):
@@ -114,6 +132,9 @@ class BlockProblem(object):
         self.section.setNumFields(self.num_fields)
         self.section.setChart(0,len(self.V.dofmap().dofs()))
 
+        if self.log_level >= 2:
+            timer_iterBlockFields = df.Timer("pFibs: Setup fields - Iterate through block fields")
+
         ## Iterate through all the block fields ##
         for key in self.block_field:
             self.section.setFieldName(self.block_field[key][0],str(key))
@@ -124,10 +145,19 @@ class BlockProblem(object):
             ## Record dof count for each field ##
             self.field_size.update({self.block_field[key][0]:ndof})
             
+            if self.log_level >= 3:
+                timer_assignDof = df.Timer("pFibs: Setup fields - Iterate through block fields - assign dof")
+
             ## Assign dof to PetscSection ##
             for i in np.nditer(dofs):
                 self.section.setDof(i-self.goffset,1)
                 self.section.setFieldDof(i-self.goffset,self.block_field[key][0],1)
+            
+            if self.log_level >= 3:
+                timer_assignDof.stop()
+
+        if self.log_level >= 2:
+            timer_iterBlockFields.stop()
 
         ## Create DM and assign PetscSection ##
         self.section.setUp()
@@ -138,8 +168,14 @@ class BlockProblem(object):
         ## Prevent any further modification to block_field ##
         self.finalize_field = True
 
+        if self.log_level >= 1:
+            timer.stop()
+
     ## Add a split to the block problem ##
     def split(self, *args, **kwargs):
+
+        if self.log_level >= 1:
+            timer = df.Timer("pFibs: Add block problem split")
 
         ## Setup fields ##
         if not self.finalize_field:
@@ -174,6 +210,9 @@ class BlockProblem(object):
 
         ## Update/override as the first split ##
         self._first_split(split_name)
+
+        if self.log_level >= 1:
+            timer.stop()
 
     ## Define the first split ##
     def _first_split(self, split_name):

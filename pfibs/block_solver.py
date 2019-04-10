@@ -13,8 +13,9 @@ try:
 except ImportError:
     dolfin_adjoint_found = False
 
-class LinearBlockSolver(object):
+class BaseBlockSolver(object):
     def __init__(self, vbp, options_prefix="", solver={}, ctx={}):
+
         self.a = vbp.a
         self.aP = vbp.aP
         self.L = vbp.L
@@ -23,21 +24,37 @@ class LinearBlockSolver(object):
         self.linear_solver = CustomKrylovSolver(vbp,options_prefix=options_prefix,
                                                 solver=solver,ctx=ctx)
 
+class LinearBlockSolver(BaseBlockSolver):
+    def __init__(self, vbp, options_prefix="", solver={}, ctx={}):
+        
+        super().__init__(vbp, options_prefix="", solver={}, ctx={})
+
         self.A = df.PETScMatrix()
         self.b = df.PETScVector()
+
+        self.log_level = vbp.log_level
 
         if self.aP is not None:
             self.P = df.PETScMatrix()
 
     def assemble(self):
-        ## Start the timer ##
-        timer = df.Timer("pFibs: Assemble System")
+        
+        ## Time function execution ##
+        timer = df.Timer("pFibs: Assemble")
+        timer.start()
+        
+        if self.log_level >= 1:
+            ## Time system assembly ##
+            timer1 = df.Timer("pFibs: Assemble - System")
 
         ## Assembly system of equations ##
-        #if self.adjoint:
-        #    dfa.assemble_system(self.a,self.L,self.bcs,A_tensor=self.A,b_tensor=self.b)
-        #else:
         df.assemble_system(self.a,self.L,self.bcs,A_tensor=self.A,b_tensor=self.b)
+        if self.log_level >= 1:
+            timer1.stop()
+
+        if self.log_level >= 1:
+            ## Time preconditioner assembly ##
+            timer2 = df.Timer("pFibs: Assemble - Preconditioner")
 
         ## Assemble preconditioner if provided ##
         if self.aP is not None:
@@ -47,12 +64,13 @@ class LinearBlockSolver(object):
                     bc.apply(self.P)
             else:
                 self.bcs.apply(self.P)
+        if self.log_level >= 1:
+            timer2.stop()
 
-        ## Stop the timer ##
-        timer.stop()
-        
         # self.A.mat().zeroEntries()
         # self.A.mat().shift(1.0)
+
+        timer.stop()
 
     def solve(self):
         ## Assemble ##
@@ -76,20 +94,21 @@ class LinearBlockSolver(object):
 
         return its
 
-class NonlinearBlockSolver(object):
-    def __init__(self, vbp, options_prefix="", solver={}, ctx={}):         
-        self.a = vbp.a
-        self.aP = vbp.aP
-        self.L = vbp.L
-        self.bcs = vbp.bcs
-        self.u = vbp.u
+class NonlinearBlockSolver(BaseBlockSolver):
+    def __init__(self, vbp, options_prefix="", solver={}, ctx={}):
+        
+        ## Time function execution ##
+        timer = df.Timer("pFibs: Init nonlinear block solver")
+        timer.start()
+        
+        super().__init__(vbp, options_prefix="", solver={}, ctx={})
         self.ident_zeros = vbp.ident_zeros
-        self.linear_solver = CustomKrylovSolver(vbp,options_prefix=options_prefix,
-                                                solver=solver,ctx=ctx)
         self.newton_solver = NS(self.linear_solver)
 
         self._init_nlp = False
         self.bcs_u = []
+
+        timer.stop()
 
     def applyBC(self):
         ## Start the timer ##
