@@ -1,4 +1,5 @@
-"""Solves the lid-driven cavity Navier-Stokes equation with schur complement on a custom PC."""
+"""Solves the lid-driven cavity Stokes equation using the chur complement. 
+Implemented via PETSc and provides Custom PC matrix."""
 
 ## Future-proofing for Python3+
 from __future__ import print_function
@@ -25,68 +26,64 @@ Lid().mark(boundaries, 1)
 Walls().mark(boundaries, 2)
 
 ## Setup Taylor Hood Function Space ##
-CG2 = VectorElement("CG", mesh.ufl_cell(), 2)
+CG2 = FiniteElement('CG', mesh.ufl_cell(), 2)
 CG1 = FiniteElement("CG", mesh.ufl_cell(), 1)
-W = MixedElement([CG2,CG1])
-W = FunctionSpace(mesh, W )
+W = MixedElement([CG2,CG2,CG1])
+W = FunctionSpace(mesh, W)
 
 ## Create Trial, Test, and Solutions Functions ##
 U  = TrialFunction(W)
 V  = TestFunction(W)
 X  = Function(W)
-u_, p_   = split(U)
-v, q   = split(V)
-u, p = split(X)
+u0, u1, p   = split(U)
+v0, v1, q   = split(V)
+u = as_vector([u0, u1])
+v = as_vector([v0, v1])
 
 ## Set up No-slip BC on the walls ##
 bcs = []
-zero = Constant((0.0,0.0))
+zero = Constant(0.0)
 bcs.append( DirichletBC(W.sub(0), zero, boundaries, 2) )
+bcs.append( DirichletBC(W.sub(1), zero, boundaries, 2) )
 
 ## Set Lid-driven flow BC ##
-inflow = Constant((1.0,0.0))
+inflow = Constant(1.0)
 bcs.append( DirichletBC(W.sub(0), inflow, boundaries, 1) )
+bcs.append( DirichletBC(W.sub(1), zero, boundaries, 1) )
 
 ## Define the forcing function ##
 f = Constant((0.0,-1.0))
 
-## Define Viscosity ##
+## Define Viscosity term ##
 nu = Constant(1.0)
 
 ## Variational form for block solver ##
-F =  nu*inner(grad(u), grad(v))*dx \
-        + inner(dot(grad(u), u), v)*dx \
-        - p*div(v)*dx - div(u)*q*dx \
-        -inner(f,v)*dx
+a =  nu*inner(grad(u), grad(v))*dx \
+        - p*div(v)*dx - div(u)*q*dx
+L = inner(f,v)*dx
 
-## Calculate Jacobian ##
-J = derivative(F,X)
-
-## Define the three operators and the boundary condition for the pressure preconditioner ##
-M_p = Constant(1.0/nu)*p_*q*dx
-K_p = Constant(1.0/nu)*dot(grad(p_), u)*q*dx
-A_p = inner(grad(p_), grad(q))*dx
-bc_pcd1 = DirichletBC(W.sub(1), Constant(0.0), boundaries, 1 )
-
-## Build a precondition and set it for the pressure block ##
-preconditoner = PCDPC_BRM1(M_p,K_p,A_p,bc_pcd1)
+## Custom PC for schur complement ##
+aP = nu*inner(grad(u), grad(v))*dx - 1/nu*p*q*dx
 
 ## Setup block problem ##
-block_structure = [['u',[[0,0],[0,1]]],['p',1]]
-problem = BlockProblem(J, F, X, bcs=bcs, block_structure=block_structure)
-
-## Built-in function calls ##
-problem.SchurType('user')
-problem.KSPType('fgmres')
-problem.SubKSPType('u','cg')
-problem.SubPCType('u','hypre')
-problem.SubPCType('p',preconditoner)
-
-## Output the ksp monitor ##
-PETScOptions.set('ksp_monitor_true_residual')
+problem = BlockProblem(a, L, X, bcs=bcs, aP=aP)
+problem.field('u', [0, 1],solver={
+    'ksp_type':'preonly',
+    'pc_type':'hypre'
+})
+problem.field('p',2,solver={
+    'ksp_type':'preonly',
+    'pc_type':'bjacobi',
+})
+problem.split('s1',['u','p'],solver={
+    'ksp_type':'gmres',
+    'pc_fieldsplit_type':'schur',
+    'pc_fieldsplit_off_diag_use_amat': True,
+    'ksp_monitor_true_residual': True
+})
 
 ## Setup block solver ##
-solver = NonlinearBlockSolver(problem)
+solver = LinearBlockSolver(problem)
 
 ## Solve problem ##
 timer = Timer("Solve Problem")

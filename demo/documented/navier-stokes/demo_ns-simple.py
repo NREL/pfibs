@@ -66,12 +66,9 @@ J = derivative(F,X)
 ## Setup block problem ##
 problem = BlockProblem(J, F, X, bcs=bcs)
 
-## Built-in function calls ##
-problem.SubPCType(0,'lu')
-problem.SubPCType(1,'lu')
-
-## Output the ksp monitor ##
-PETScOptions.set('ksp_monitor_true_residual')
+## Add fields
+problem.field('v',0,solver={'ksp_type':'preonly','pc_type':'lu'})
+problem.field('p',1,solver={'ksp_type':'preonly','pc_type':'lu'})
 
 ## Setup block solver ##
 solver = NonlinearBlockSolver(problem)
