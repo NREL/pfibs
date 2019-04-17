@@ -6,7 +6,7 @@ from cpython.mem cimport PyMem_Malloc
 def iterate_section(section, full_field_array, num_sub_fields, sub_field_array, total_field_indx, ISarray, sub_field_indx):
     ## Iterate through Section Chart ##
     cdef int pstart, pend, i, i_field, j, field, my_total_field_indx, i_sub_field
-    my_total_field_indx = 0
+    my_total_field_indx =  total_field_indx
     my_full_field_array = <int *>PyMem_Malloc(len(full_field_array)*sizeof(int))
     len_arr = len(full_field_array)
     for i in range(len_arr):
@@ -29,6 +29,8 @@ def iterate_section(section, full_field_array, num_sub_fields, sub_field_array, 
 
 
     my_sub_field_indx = <int *>PyMem_Malloc(len(sub_field_indx)*sizeof(int))
+    for i in range(len(sub_field_indx)):
+        my_sub_field_indx[i] = sub_field_indx[i]
 
     cdef int my_num_sub_fields = num_sub_fields
     cdef int numDof
