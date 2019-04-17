@@ -61,6 +61,7 @@ def iterate_section(section, full_field_array, num_sub_fields, sub_field_array, 
     total_field_indx = my_total_field_indx
     for i in range(len(sub_field_indx)):
         sub_field_indx[i] = my_sub_field_indx[i]
+    return total_field_indx
 
 
 def assign_dof(section, np.ndarray dofs, goffset, bfk):

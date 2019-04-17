@@ -265,7 +265,7 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
 
         if self.log_level >= 4:
             timer_iterSecChart = df.Timer("pFibs: Setup Solver Options - set_fieldsplit - create PCFieldSplit - extract_IS - iterate through Section Chart")
-        iterate_section(self.section, full_field_array, num_sub_fields, sub_field_array, total_field_indx, ISarray, sub_field_indx)
+        total_field_indx = iterate_section(self.section, full_field_array, num_sub_fields, sub_field_array, total_field_indx, ISarray, sub_field_indx)
         ## Iterate through Section Chart ##
 #        pstart,pend = self.section.getChart()
 #        dofChart = np.arange(pstart,pend)
