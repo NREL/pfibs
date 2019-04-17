@@ -6,6 +6,7 @@ import dolfin as df
 import numpy as np
 from petsc4py import PETSc
 from mpi4py import MPI
+from helper import iterate_section
 comm = MPI.COMM_WORLD
 rank = MPI.COMM_WORLD.Get_rank()
 size = MPI.COMM_WORLD.Get_size()
@@ -264,32 +265,62 @@ class CustomKrylovSolver(df.PETScKrylovSolver):
 
         if self.log_level >= 4:
             timer_iterSecChart = df.Timer("pFibs: Setup Solver Options - set_fieldsplit - create PCFieldSplit - extract_IS - iterate through Section Chart")
+        iterate_section(self.section, full_field_array, num_sub_fields, sub_field_array, total_field_indx, ISarray, sub_field_indx)
         ## Iterate through Section Chart ##
-        pstart,pend = self.section.getChart()
-        dofChart = np.arange(pstart,pend)
-        for i in np.nditer(dofChart):
-            for field in full_field_array:
-                ## Check if this DoF is associated with the given field ##
-                numDof = self.section.getFieldDof(i,field)
-
-                ## If it is, find which sub field array it belongs to ##
-                if numDof > 0:
-                    found_field = False
-                    for j in range(num_sub_fields):
-                        if isinstance(sub_field_array[j][1],int):
-                            if field == sub_field_array[j][1]:
-                                found_field = True
-                        elif field in sub_field_array[j][1]:
-                            found_field = True
-                        if found_field:
-                            ISarray[j][sub_field_indx[j]] = total_field_indx
-                            sub_field_indx[j] += 1
-                            total_field_indx += 1
-                            break
-                    if not found_field:
-                        raise ValueError("field ID %d not found in fieldsplit array" %field)
-                    else:
-                        break
+#        pstart,pend = self.section.getChart()
+#        dofChart = np.arange(pstart,pend)
+#        for i in np.nditer(dofChart):
+#            for field in full_field_array:
+#                ## Check if this DoF is associated with the given field ##
+#                numDof = self.section.getFieldDof(i,field)
+#
+#                ## If it is, find which sub field array it belongs to ##
+#                if numDof > 0:
+#                    found_field = False
+#                    for j in range(num_sub_fields):
+#                        if isinstance(sub_field_array[j][1],int):
+#                            if field == sub_field_array[j][1]:
+#                                found_field = True
+#                        elif field in sub_field_array[j][1]:
+#                            found_field = True
+#                        if found_field:
+#                            ISarray[j][sub_field_indx[j]] = total_field_indx
+#                            sub_field_indx[j] += 1
+#                            total_field_indx += 1
+#                            break
+#                    if not found_field:
+#                        raise ValueError("field ID %d not found in fieldsplit array" %field)
+#                    else:
+#                        break
+#        print(sub_field_indx)
+#        print(ISarray)
+#        exit()
+#        ## Iterate through Section Chart ##
+#        pstart,pend = self.section.getChart()
+#        dofChart = np.arange(pstart,pend)
+#        for i in np.nditer(dofChart):
+#            for field in full_field_array:
+#                ## Check if this DoF is associated with the given field ##
+#                numDof = self.section.getFieldDof(i,field)
+#
+#                ## If it is, find which sub field array it belongs to ##
+#                if numDof > 0:
+#                    found_field = False
+#                    for j in range(num_sub_fields):
+#                        if isinstance(sub_field_array[j][1],int):
+#                            if field == sub_field_array[j][1]:
+#                                found_field = True
+#                        elif field in sub_field_array[j][1]:
+#                            found_field = True
+#                        if found_field:
+#                            ISarray[j][sub_field_indx[j]] = total_field_indx
+#                            sub_field_indx[j] += 1
+#                            total_field_indx += 1
+#                            break
+#                    if not found_field:
+#                        raise ValueError("field ID %d not found in fieldsplit array" %field)
+#                    else:
+#                        break
         if self.log_level >= 4:
             timer_iterSecChart.stop()
 
