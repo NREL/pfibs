@@ -12,11 +12,12 @@ def iterate_section(section, full_field_array, num_sub_fields, sub_field_array, 
     for i in range(len_arr):
         my_full_field_array[i] = full_field_array[i]
     len_sub_field_array = len(sub_field_array)
-    len_sub_field_array_2 = len(sub_field_array[0][1])
     my_sub_field_array = <int **>PyMem_Malloc(len_sub_field_array*sizeof(int*))
+    len_sub_field_array_2 = <int *>PyMem_Malloc(len_sub_field_array*sizeof(int))
     for i in range(len_sub_field_array):
-        my_sub_field_array[i] = <int *>PyMem_Malloc(len_sub_field_array_2*sizeof(int))
-        for j in range(len_sub_field_array_2):
+        len_sub_field_array_2[i] = len(sub_field_array[i][1])
+        my_sub_field_array[i] = <int *>PyMem_Malloc(len_sub_field_array_2[i]*sizeof(int))
+        for j in range(len_sub_field_array_2[i]):
             my_sub_field_array[i][j] = sub_field_array[i][1][j]
 
     len_ISarray = len(ISarray)
@@ -45,7 +46,7 @@ def iterate_section(section, full_field_array, num_sub_fields, sub_field_array, 
             if numDof > 0:
                 found_field = False
                 for j in range(my_num_sub_fields):
-                    for i_sub_field in range(len_sub_field_array_2):
+                    for i_sub_field in range(len_sub_field_array_2[j]):
                         if field == my_sub_field_array[j][i_sub_field]:
                             found_field = True
                     if found_field:
