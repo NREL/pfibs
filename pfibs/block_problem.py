@@ -151,10 +151,6 @@ class BlockProblem(object):
                 timer_assignDof = df.Timer("pFibs: Setup fields - Iterate through block fields - assign dof")
 
             assign_dof(self.section, dofs, self.goffset, self.block_field[key][0])
-            ## Assign dof to PetscSection ##
-            #for i in np.nditer(dofs):
-            #    self.section.setDof(i-self.goffset,1)
-            #    self.section.setFieldDof(i-self.goffset,self.block_field[key][0],1)
             
             if self.log_level >= 3:
                 timer_assignDof.stop()
