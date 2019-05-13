@@ -38,4 +38,3 @@ from pfibs.custom_linear import CustomKrylovSolver
 from pfibs.custom_nonlinear import NLP, NS
 from pfibs.block_problem import BlockProblem
 from pfibs.block_solver import LinearBlockSolver, NonlinearBlockSolver
-from pfibs.pfibs_adjoint import *

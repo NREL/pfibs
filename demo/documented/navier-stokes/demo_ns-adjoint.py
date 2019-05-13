@@ -7,6 +7,7 @@ from __future__ import print_function
 from dolfin import *
 from dolfin_adjoint import *
 from pfibs import *
+from pfibs.pfibs_adjoint import *
 
 ## Generate mesh ##
 mesh = RectangleMesh(Point(0.0,0.0),Point(1.0,1.0),64,64)
