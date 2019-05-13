@@ -6,6 +6,8 @@ import dolfin as df
 import numpy as np
 from petsc4py import PETSc
 
+from helper import assign_dof
+
 ## Optionally import dolfin_adjoint ##
 try:
     import dolfin_adjoint as dfa 
@@ -148,10 +150,7 @@ class BlockProblem(object):
             if self.log_level >= 3:
                 timer_assignDof = df.Timer("pFibs: Setup fields - Iterate through block fields - assign dof")
 
-            ## Assign dof to PetscSection ##
-            for i in np.nditer(dofs):
-                self.section.setDof(i-self.goffset,1)
-                self.section.setFieldDof(i-self.goffset,self.block_field[key][0],1)
+            assign_dof(self.section, dofs, self.goffset, self.block_field[key][0])
             
             if self.log_level >= 3:
                 timer_assignDof.stop()
