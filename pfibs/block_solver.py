@@ -27,7 +27,8 @@ class BaseBlockSolver(object):
 class LinearBlockSolver(BaseBlockSolver):
     def __init__(self, vbp, options_prefix="", solver={}, ctx={}):
         
-        super(LinearBlockSolver,self).__init__(vbp, options_prefix="", solver={}, ctx={})
+        super(LinearBlockSolver,self).__init__(vbp, options_prefix, solver, ctx)
+
 
         self.A = df.PETScMatrix()
         self.b = df.PETScVector()
@@ -101,7 +102,7 @@ class NonlinearBlockSolver(BaseBlockSolver):
         timer = df.Timer("pFibs: Init nonlinear block solver")
         timer.start()
         
-        super(NonlinearBlockSolver,self).__init__(vbp, options_prefix="", solver={}, ctx={})
+        super(NonlinearBlockSolver,self).__init__(vbp, options_prefix, solver, ctx)
         self.ident_zeros = vbp.ident_zeros
         self.newton_solver = NS(self.linear_solver)
 
