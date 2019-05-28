@@ -87,23 +87,7 @@ cc_0      = ifc*cc_max
 
 ## Open circuit voltage ##
 def OCP_c(x):
-  a14=-3.640117692001490E+03;
-  a13=1.317657544484270E+04;
-  a12=- 1.455742062291360E+04;
-  a11=- 1.571094264365090E+03;
-  a10=+ 1.265630978512400E+04;
-  a9=- 2.057808873526350E+03;
-  a8=- 1.074374333186190E+04;
-  a7=+ 8.698112755348720E+03;
-  a6=- 8.297904604107030E+02;
-  a5=- 2.073765547574810E+03;
-  a4=+ 1.190223421193310E+03;
-  a3=- 2.724851668445780E+02;
-  a2=+ 2.723409218042130E+01;
-  a1=- 4.158276603609060E+00;
-  a0=5.314735633000300;
-  addition= - 5.573191762723310E-04*exp(6.560240842659690E+00*(x**4.148209275061330E+01));
-  OCP = (((((((((((((a14*x+a13)*x+a12)*x+a11)*x+a10)*x+a9)*x+a8)*x+a7)*x+a6)*x+a5)*x+a4)*x+a3)*x+a2)*x+a1)*x+a0+addition
+  OCP = ((((1200-2000*x)*x-275)*x+27)*x-4.1)*x+5.0
   return (OCP)
 def OCP_a(x):
   return 1.0e-9*x
@@ -112,12 +96,10 @@ Uc0 = OCP_c(ifc)
 
 ## Exchange current density ##
 def io_a(cs,ce,cs_max):
-  #io = ka*sqrt((cs))*sqrt((ce))*(sqrt((cs_max-cs)))
   io = 100
   return(io)
 def io_c(cs,ce,cs_max):
   io = kc*sqrt(abs(cs))*sqrt(abs(ce))*(sqrt(abs(cs_max-cs)))
-  #io = kc*cs*ce*(cs_max-cs)#sqrt(abs(cs))*sqrt(abs(ce))*(sqrt(abs(cs_max-cs)))
   return(io)
 i0a = io_a(ca_0,ce_0,ca_max)
 i0c = io_c(cc_0,ce_0,cc_max)
